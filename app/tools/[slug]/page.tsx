@@ -1,13 +1,13 @@
-import { notFound } from "next/navigation";
+import { RedirectToWorkspace } from "./RedirectToWorkspace";
 import { TOOLS } from "@/lib/tools";
-import { ToolPageClient } from "./ToolPageClient";
 
+// The per-tool pages were replaced by a single workspace at "/" with tools as
+// buttons. Static export can't do a real server redirect (no server), so
+// each old URL statically renders a tiny client component that redirects on
+// load, keeping any bookmarked/shared /tools/<slug> links useful.
 export default async function ToolPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  if (!(slug in TOOLS)) {
-    notFound();
-  }
-  return <ToolPageClient slug={slug as keyof typeof TOOLS} />;
+  return <RedirectToWorkspace slug={slug} />;
 }
 
 export function generateStaticParams() {

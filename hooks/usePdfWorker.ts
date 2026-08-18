@@ -20,6 +20,7 @@ function collectTransferables(job: PdfJob): ArrayBuffer[] {
     case "organize":
     case "watermark":
     case "pageNumbers":
+    case "crop":
     case "protect":
     case "unlock":
       return [job.bytes];

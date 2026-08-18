@@ -4,6 +4,7 @@ import type { PageRange } from "./split";
 import type { WatermarkOptions } from "./watermark";
 import type { PageNumberOptions } from "./pageNumbers";
 import type { ImageInput } from "./imagesToPdf";
+import type { CropOptions } from "./crop";
 
 export type PdfJob =
   | { type: "merge"; bytesList: ArrayBuffer[] }
@@ -12,6 +13,7 @@ export type PdfJob =
   | { type: "organize"; bytes: ArrayBuffer; edits: PageEdit[] }
   | { type: "watermark"; bytes: ArrayBuffer; options: WatermarkOptions }
   | { type: "pageNumbers"; bytes: ArrayBuffer; options: PageNumberOptions }
+  | { type: "crop"; bytes: ArrayBuffer; options: CropOptions }
   | { type: "protect"; bytes: ArrayBuffer; options: ProtectOptions }
   | { type: "unlock"; bytes: ArrayBuffer; password: string };
 

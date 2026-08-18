@@ -5,6 +5,7 @@ import { splitPdf } from "@/lib/pdf/split";
 import { applyPageEdits } from "@/lib/pdf/organize";
 import { addWatermark } from "@/lib/pdf/watermark";
 import { addPageNumbers } from "@/lib/pdf/pageNumbers";
+import { cropPdf } from "@/lib/pdf/crop";
 import { protectPdf } from "@/lib/pdf/protect";
 import { unlockPdf } from "@/lib/pdf/unlock";
 import { zipFiles } from "@/lib/pdf/zip";
@@ -38,6 +39,10 @@ async function runJob(job: PdfJobRequest): Promise<PdfJobResult> {
     case "pageNumbers": {
       const bytes = await addPageNumbers(job.bytes, job.options);
       return { filename: "numbered.pdf", bytes: toArrayBuffer(bytes) };
+    }
+    case "crop": {
+      const bytes = await cropPdf(job.bytes, job.options);
+      return { filename: "cropped.pdf", bytes: toArrayBuffer(bytes) };
     }
     case "protect": {
       const bytes = await protectPdf(new Uint8Array(job.bytes), job.options);

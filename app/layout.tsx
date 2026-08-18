@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PDF Tools — free, private PDF editing in your browser",
+  title: "PDFusion — free, private PDF editing in your browser",
   description:
     "Merge, split, compress, convert, watermark, and password-protect PDFs. Everything runs locally in your browser — your files are never uploaded anywhere.",
 };

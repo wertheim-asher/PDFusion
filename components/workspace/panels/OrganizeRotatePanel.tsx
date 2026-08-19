@@ -35,9 +35,13 @@ export function OrganizeRotatePanel({ file, edits, restricted, runJob, onApply }
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500">
+        Find <strong className="font-medium text-gray-700">{file.file.name}</strong> in the file list — its pages
+        are now editable there.
+      </p>
+      <p className="text-sm text-gray-500">
         {restricted
-          ? "Click ⟳ on a page to rotate it, or use “Rotate all” above the pages."
-          : "Drag pages to reorder them, click ✕ to delete a page, ⟳ to rotate it."}
+          ? "Click ⟳ on any page to rotate just that page, or use “Rotate all” above the page list."
+          : "Drag a page to move it, click ✕ to delete it, or ⟳ to rotate it. Then save your changes here."}
       </p>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button

@@ -23,8 +23,13 @@ export async function compressPdf(file: File, level: CompressLevel): Promise<Uin
   ).toString();
 
   const buf = await file.arrayBuffer();
+  // pdf.js transfers (and detaches) `buf` to its worker via getDocument, so
+  // grab a real copy now — the fallback below needs the original bytes
+  // after `buf` itself is no longer readable.
+  const originalBytes = new Uint8Array(buf.slice(0));
   const loadingTask = pdfjsLib.getDocument({ data: buf });
   const src = await loadingTask.promise;
+  let rasterized: Uint8Array;
   try {
     const out = await PDFDocument.create();
     for (let i = 1; i <= src.numPages; i++) {
@@ -41,10 +46,19 @@ export async function compressPdf(file: File, level: CompressLevel): Promise<Uin
       const outPage = out.addPage([pointSize.width, pointSize.height]);
       outPage.drawImage(embedded, { x: 0, y: 0, width: pointSize.width, height: pointSize.height });
     }
-    return out.save();
+    rasterized = await out.save();
   } finally {
     loadingTask.destroy();
   }
+
+  // Rasterizing to JPEG only shrinks image-heavy/scanned PDFs — for
+  // text-heavy or already-small/vector PDFs it can come out larger,
+  // especially at the "high" preset's 2x scale. "Compress" should never
+  // hand back something bigger than what went in.
+  if (rasterized.byteLength >= originalBytes.byteLength) {
+    return originalBytes;
+  }
+  return rasterized;
 }
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {

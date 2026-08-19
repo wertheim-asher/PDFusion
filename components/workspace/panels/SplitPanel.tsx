@@ -30,7 +30,7 @@ export function SplitPanel({ file, selection, runJob }: SplitPanelProps) {
   const ranges = toRanges(selection);
   const summary =
     ranges.length === 0
-      ? "Click pages above to select which ones to extract."
+      ? `Click pages on ${file.name} in the file list to choose which ones to extract.`
       : `${selection.length} page${selection.length === 1 ? "" : "s"} selected → ${ranges.length} file${
           ranges.length === 1 ? "" : "s"
         }.`;

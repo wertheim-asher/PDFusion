@@ -9,7 +9,7 @@ import type { PageNumberOptions } from "@/lib/pdf/pageNumbers";
 import type { PageEdit } from "@/lib/pdf/organize";
 import type { PdfJob, PdfJobResult } from "@/lib/pdf/jobs";
 import type { WorkspaceFile } from "@/hooks/useWorkspace";
-import { TOOLS, type ToolSlug } from "@/lib/tools";
+import { TOOLS, type ToolSlug, isToolUsable, matchingFiles, toolUnavailableHint } from "@/lib/tools";
 import { WholeDocPanel } from "./panels/WholeDocPanel";
 import { OrganizeRotatePanel } from "./panels/OrganizeRotatePanel";
 import { SplitPanel } from "./panels/SplitPanel";
@@ -33,27 +33,12 @@ const numberInput =
 const label = "block text-sm font-medium text-gray-700";
 
 export function ToolPanel({ tool, files, checkedIds, edits, splitSelection, runJob, onApplyBatch, onApplyCombine }: ToolPanelProps) {
-  const meta = TOOLS[tool];
-  const checkedFiles = files.filter((f) => checkedIds.has(f.id));
-  const needsImages = tool === "jpg-to-pdf";
-  const matching = checkedFiles.filter((f) => (needsImages ? f.file.type.startsWith("image/") : f.file.type === "application/pdf"));
+  const checkedFiles = files.filter((f) => checkedIds.has(f.id)).map((f) => f.file);
+  const matchingWorkspaceFiles = files.filter((f) => checkedIds.has(f.id) && matchingFiles(tool, [f.file]).length > 0);
+  const matching = matchingWorkspaceFiles;
 
-  if (meta.scope === "single" && matching.length !== 1) {
-    return (
-      <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500">
-        Check exactly one PDF above to use {meta.title}.
-      </p>
-    );
-  }
-  if (tool === "merge-pdf" && matching.length < 2) {
-    return <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500">Check at least two PDFs to merge.</p>;
-  }
-  if (meta.scope !== "single" && tool !== "merge-pdf" && matching.length === 0) {
-    return (
-      <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500">
-        Check at least one {needsImages ? "image" : "PDF"} above to use {meta.title}.
-      </p>
-    );
+  if (!isToolUsable(tool, checkedFiles)) {
+    return <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500">{toolUnavailableHint(tool)}</p>;
   }
 
   switch (tool) {

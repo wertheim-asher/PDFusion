@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import type { WorkspaceFile } from "@/hooks/useWorkspace";
 import type { PdfJob } from "@/lib/pdf/jobs";
 import type { ImageInput } from "@/lib/pdf/imagesToPdf";
 
 interface JpgToPdfPanelProps {
-  files: File[];
+  files: WorkspaceFile[];
   runJob: (job: PdfJob) => Promise<{ filename: string; bytes: ArrayBuffer }>;
-  onApply: (file: File) => void;
+  onApply: (removeIds: string[], newFile: File) => void;
 }
 
 export function JpgToPdfPanel({ files, runJob, onApply }: JpgToPdfPanelProps) {
@@ -19,13 +20,16 @@ export function JpgToPdfPanel({ files, runJob, onApply }: JpgToPdfPanelProps) {
     setError(null);
     try {
       const images: ImageInput[] = await Promise.all(
-        files.map(async (f) => ({
-          bytes: await f.arrayBuffer(),
-          type: f.type === "image/png" ? ("image/png" as const) : ("image/jpeg" as const),
+        files.map(async (wf) => ({
+          bytes: await wf.file.arrayBuffer(),
+          type: wf.file.type === "image/png" ? ("image/png" as const) : ("image/jpeg" as const),
         }))
       );
       const result = await runJob({ type: "imagesToPdf", images });
-      onApply(new File([result.bytes], result.filename, { type: "application/pdf" }));
+      onApply(
+        files.map((wf) => wf.id),
+        new File([result.bytes], result.filename, { type: "application/pdf" })
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setStatus("error");
@@ -35,13 +39,15 @@ export function JpgToPdfPanel({ files, runJob, onApply }: JpgToPdfPanelProps) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500">
-        {files.length === 0 ? "Add JPG or PNG images above." : `Converting ${files.length} image${files.length === 1 ? "" : "s"} into one PDF, in this order.`}
+        {files.length === 0
+          ? "Check at least one JPG or PNG."
+          : `Converting ${files.length} checked image${files.length === 1 ? "" : "s"} into one PDF, in this order.`}
       </p>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
         onClick={handleConvert}
         disabled={status === "working" || files.length === 0}
-        className="w-full rounded-lg bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition-colors"
+        className="w-full rounded-lg bg-red-600 px-6 py-3 font-semibold text-white transition-all duration-150 hover:bg-red-700 active:scale-[0.98] disabled:opacity-60"
       >
         {status === "working" ? "Working…" : "Convert to PDF"}
       </button>

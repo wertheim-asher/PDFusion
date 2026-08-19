@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
-import { FileDropzone } from "@/components/FileDropzone";
-import { PdfPageGrid } from "@/components/PdfPageGrid";
 import { usePdfWorker } from "@/hooks/usePdfWorker";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { TOOLS, type ToolSlug } from "@/lib/tools";
 import { Toolbar } from "./Toolbar";
-import { FileTray } from "./FileTray";
+import { FilesRow } from "./FilesRow";
 import { ToolPanel } from "./ToolPanel";
 
 const LARGE_FILE_WARNING_BYTES = 150 * 1024 * 1024;
@@ -17,7 +15,7 @@ const LARGE_FILE_WARNING_BYTES = 150 * 1024 * 1024;
 export function Workspace() {
   const ws = useWorkspace();
   const { runJob } = usePdfWorker();
-  const [splitSelection, setSplitSelection] = useState<number[]>([]);
+  const [splitSelectionByFile, setSplitSelectionByFile] = useState<Record<string, number[]>>({});
 
   useEffect(() => {
     // Static export can't read the ?tool= query param server-side, so pick it
@@ -29,35 +27,20 @@ export function Workspace() {
   }, []);
 
   useEffect(() => {
-    // Clears Split's page selection when switching tools, not state derived
-    // from props (selection isn't part of undo history — see PdfPageGrid).
+    // Split selection is per-file UI state, not part of undo history — clear
+    // it whenever the active tool changes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSplitSelection([]);
+    setSplitSelectionByFile({});
   }, [ws.activeTool]);
 
-  const isMultiFileTool = ws.activeTool === "merge-pdf" || ws.activeTool === "jpg-to-pdf";
-  const isPdfSingle = ws.files.length === 1 && ws.files[0].type === "application/pdf";
-  const downloadUrl = useMemo(() => (isPdfSingle ? URL.createObjectURL(ws.files[0]) : null), [isPdfSingle, ws.files]);
-  useEffect(() => () => {
-    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
-  }, [downloadUrl]);
-  // Merge/JPG→PDF always show the tray (even with just one file loaded so
-  // far) so "add another file" is never gated behind a second upload.
-  const showTray = ws.files.length > 0 && (isMultiFileTool || !isPdfSingle);
-
-  const gridProps =
-    ws.activeTool === "organize-pdf"
-      ? { allowReorder: true, allowDelete: true, allowRotate: true, selectable: false }
-      : ws.activeTool === "rotate-pdf"
-        ? { allowReorder: false, allowDelete: false, allowRotate: true, selectable: false }
-        : ws.activeTool === "split-pdf"
-          ? { allowReorder: false, allowDelete: false, allowRotate: false, selectable: true }
-          : { allowReorder: false, allowDelete: false, allowRotate: false, selectable: false };
+  const meta = ws.activeTool ? TOOLS[ws.activeTool] : null;
+  const singleCheckedId = ws.checked.size === 1 ? Array.from(ws.checked)[0] : null;
+  const splitSelection = singleCheckedId ? (splitSelectionByFile[singleCheckedId] ?? []) : [];
 
   return (
     <div className="min-h-screen bg-zinc-50">
       <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-5xl px-4 py-6">
+        <div className="mx-auto max-w-6xl px-4 py-6">
           <Link href="/">
             <Logo iconClassName="h-8 w-8" textClassName="text-2xl" />
           </Link>
@@ -67,7 +50,29 @@ export function Workspace() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8 space-y-6">
+      <main className="mx-auto max-w-6xl space-y-6 px-4 py-8">
+        {ws.files.some((f) => f.file.size > LARGE_FILE_WARNING_BYTES) && (
+          <p className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            Large files are processed entirely in your browser and may run slowly or run out of memory, depending on
+            your device.
+          </p>
+        )}
+
+        <FilesRow
+          files={ws.files}
+          checked={ws.checked}
+          onToggleChecked={ws.toggleChecked}
+          onRemove={(id) => ws.removeFiles([id])}
+          onRemoveChecked={() => ws.removeFiles(Array.from(ws.checked))}
+          onReorder={ws.reorderFiles}
+          onAddFiles={ws.addFiles}
+          edits={ws.edits}
+          onFileEditsChange={ws.setFileEdits}
+          onFileLoaded={ws.initFileEdits}
+          activeTool={ws.activeTool}
+          onSelectionChange={(id, indices) => setSplitSelectionByFile((prev) => ({ ...prev, [id]: indices }))}
+        />
+
         <Toolbar
           activeTool={ws.activeTool}
           onSelectTool={ws.setActiveTool}
@@ -79,77 +84,25 @@ export function Workspace() {
           hasFiles={ws.files.length > 0}
         />
 
-        {ws.files.length === 0 && !ws.activeTool ? (
-          <FileDropzone
-            accept="application/pdf,image/jpeg,image/png"
-            multiple
-            label="Drop a PDF or images here to get started"
-            hint="Or pick a tool above."
-            onFiles={ws.setFiles}
-          />
-        ) : (
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="space-y-3 lg:col-span-2">
-              {downloadUrl && (
-                <div className="flex justify-end">
-                  <a
-                    href={downloadUrl}
-                    download={ws.files[0].name}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-                  >
-                    ↓ Download current file
-                  </a>
-                </div>
-              )}
-              {ws.files.some((f) => f.size > LARGE_FILE_WARNING_BYTES) && (
-                <p className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800">
-                  Large files are processed entirely in your browser and may run slowly or run out of memory,
-                  depending on your device.
-                </p>
-              )}
-              {ws.files.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-gray-300 p-12 text-center text-sm text-gray-400">
-                  Upload a file using the panel on the right.
-                </p>
-              ) : showTray ? (
-                <FileTray
-                  files={ws.files}
-                  onFilesChange={ws.setFiles}
-                  accept={ws.files[0].type.startsWith("image/") ? "image/jpeg,image/png" : "application/pdf"}
-                  addLabel={ws.files[0].type.startsWith("image/") ? "Add more images" : "Add more PDFs"}
-                />
-              ) : (
-                <PdfPageGrid
-                  file={ws.files[0]}
-                  edits={ws.edits}
-                  onEditsChange={ws.setEdits}
-                  onLoaded={ws.initEdits}
-                  onSelectionChange={setSplitSelection}
-                  {...gridProps}
-                />
-              )}
-            </div>
-
-            <div className="lg:col-span-1">
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
-                {ws.activeTool ? (
-                  <>
-                    <h3 className="mb-3 font-semibold text-gray-900">{TOOLS[ws.activeTool].title}</h3>
-                    <ToolPanel
-                      tool={ws.activeTool}
-                      files={ws.files}
-                      edits={ws.edits}
-                      splitSelection={splitSelection}
-                      runJob={runJob}
-                      onApply={ws.applyResult}
-                      onRequestFiles={ws.setFiles}
-                    />
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-500">Pick a tool above to get started.</p>
-                )}
-              </div>
-            </div>
+        {ws.activeTool && meta && (
+          <div
+            className="animate-card-in rounded-xl border bg-white p-4 shadow-sm"
+            style={{ borderColor: `${meta.accent}55` }}
+          >
+            <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900">
+              <span aria-hidden="true">{meta.icon}</span>
+              {meta.title}
+            </h3>
+            <ToolPanel
+              tool={ws.activeTool}
+              files={ws.files}
+              checkedIds={ws.checked}
+              edits={ws.edits}
+              splitSelection={splitSelection}
+              runJob={runJob}
+              onApplyBatch={ws.replaceFiles}
+              onApplyCombine={ws.replaceWithCombined}
+            />
           </div>
         )}
       </main>

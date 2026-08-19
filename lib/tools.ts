@@ -108,3 +108,26 @@ export const TOOLS = {
 } as const satisfies Record<string, ToolMeta>;
 
 export type ToolSlug = keyof typeof TOOLS;
+
+/** Files among `files` that this tool actually operates on (PDFs, except JPG→PDF which wants images). */
+export function matchingFiles(tool: ToolSlug, files: File[]): File[] {
+  const needsImages = tool === "jpg-to-pdf";
+  return files.filter((f) => (needsImages ? f.type.startsWith("image/") : f.type === "application/pdf"));
+}
+
+/** Single source of truth for both graying out a tool button and gating its panel. */
+export function isToolUsable(tool: ToolSlug, checkedFiles: File[]): boolean {
+  const matching = matchingFiles(tool, checkedFiles);
+  const scope = TOOLS[tool].scope;
+  if (scope === "single") return matching.length === 1;
+  if (tool === "merge-pdf") return matching.length >= 2;
+  return matching.length >= 1;
+}
+
+export function toolUnavailableHint(tool: ToolSlug): string {
+  const meta = TOOLS[tool];
+  if (meta.scope === "single") return `Check exactly one PDF above to use ${meta.title}.`;
+  if (tool === "merge-pdf") return "Check at least two PDFs above to merge them.";
+  if (tool === "jpg-to-pdf") return "Check at least one JPG or PNG above to convert.";
+  return `Check at least one PDF above to use ${meta.title}.`;
+}

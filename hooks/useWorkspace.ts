@@ -143,6 +143,12 @@ export function useWorkspace() {
     });
   }, []);
 
+  const selectAll = useCallback(() => {
+    setChecked(new Set(current.files.map((f) => f.id)));
+  }, [current.files]);
+
+  const deselectAll = useCallback(() => setChecked(new Set()), []);
+
   const setActiveTool = useCallback((tool: ToolSlug) => {
     setActiveToolState((prev) => (prev === tool ? null : tool));
   }, []);
@@ -174,6 +180,8 @@ export function useWorkspace() {
       replaceFiles,
       replaceWithCombined,
       toggleChecked,
+      selectAll,
+      deselectAll,
       undo,
       redo,
       startOver,
@@ -193,6 +201,8 @@ export function useWorkspace() {
       replaceFiles,
       replaceWithCombined,
       toggleChecked,
+      selectAll,
+      deselectAll,
       undo,
       redo,
       startOver,

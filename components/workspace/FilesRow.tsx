@@ -11,7 +11,6 @@ interface FilesRowProps {
   checked: Set<string>;
   onToggleChecked: (id: string) => void;
   onRemove: (id: string) => void;
-  onRemoveChecked: () => void;
   onReorder: (from: number, to: number) => void;
   onAddFiles: (files: File[]) => void;
   edits: Record<string, PageEdit[]>;
@@ -32,7 +31,6 @@ export function FilesRow({
   checked,
   onToggleChecked,
   onRemove,
-  onRemoveChecked,
   onReorder,
   onAddFiles,
   edits,
@@ -57,20 +55,8 @@ export function FilesRow({
   const pageToolGridProps = activeTool ? PAGE_TOOL_GRID_PROPS[activeTool] : undefined;
 
   return (
-    <div className="space-y-2">
-      {checked.size > 0 && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={onRemoveChecked}
-            className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600"
-          >
-            🗑 Remove {checked.size} checked
-          </button>
-        </div>
-      )}
-      <div className="flex gap-4 overflow-x-auto pb-2">
-        {files.map((wf, index) => {
+    <div className="flex flex-wrap gap-4">
+      {files.map((wf, index) => {
           const interactive = checked.size === 1 && checked.has(wf.id) && !!pageToolGridProps;
           return (
             <FileCard
@@ -134,7 +120,6 @@ export function FilesRow({
             }}
           />
         </div>
-      </div>
     </div>
   );
 }

@@ -94,7 +94,8 @@ export function FileCard({
           type="button"
           onClick={onRemove}
           aria-label={`Remove ${wf.file.name}`}
-          className="shrink-0 text-gray-400 transition-colors hover:text-red-600"
+          title="Remove"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-xs text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
         >
           ✕
         </button>
@@ -125,10 +126,16 @@ function FileCardFooter({ file }: { file: File }) {
   const url = useMemo(() => URL.createObjectURL(file), [file]);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
   return (
-    <div className="flex items-center justify-between border-t border-gray-100 px-2 py-1.5 text-[11px] text-gray-400">
+    <div className="flex items-center justify-between border-t border-gray-100 px-2 py-1 text-[11px] text-gray-400">
       <span>{formatBytes(file.size)}</span>
-      <a href={url} download={file.name} className="text-gray-500 hover:text-red-600 transition-colors">
-        ↓ Download
+      <a
+        href={url}
+        download={file.name}
+        title="Download"
+        aria-label={`Download ${file.name}`}
+        className="flex h-5 w-5 items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-100 hover:text-red-600"
+      >
+        ↓
       </a>
     </div>
   );

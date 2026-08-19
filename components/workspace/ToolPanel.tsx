@@ -1,6 +1,5 @@
 "use client";
 
-import { FileDropzone } from "@/components/FileDropzone";
 import { compressPdf, type CompressLevel } from "@/lib/pdf/compress";
 import type { CropOptions } from "@/lib/pdf/crop";
 import { bytesToFile } from "@/lib/pdf/bytes";
@@ -9,6 +8,7 @@ import type { WatermarkOptions } from "@/lib/pdf/watermark";
 import type { PageNumberOptions } from "@/lib/pdf/pageNumbers";
 import type { PageEdit } from "@/lib/pdf/organize";
 import type { PdfJob, PdfJobResult } from "@/lib/pdf/jobs";
+import type { WorkspaceFile } from "@/hooks/useWorkspace";
 import { TOOLS, type ToolSlug } from "@/lib/tools";
 import { WholeDocPanel } from "./panels/WholeDocPanel";
 import { OrganizeRotatePanel } from "./panels/OrganizeRotatePanel";
@@ -19,64 +19,86 @@ import { JpgToPdfPanel } from "./panels/JpgToPdfPanel";
 
 interface ToolPanelProps {
   tool: ToolSlug;
-  files: File[];
-  edits: PageEdit[];
+  files: WorkspaceFile[];
+  checkedIds: Set<string>;
+  edits: Record<string, PageEdit[]>;
   splitSelection: number[];
   runJob: (job: PdfJob) => Promise<PdfJobResult>;
-  onApply: (file: File) => void;
-  onRequestFiles: (files: File[]) => void;
+  onApplyBatch: (updates: { id: string; file: File }[]) => void;
+  onApplyCombine: (removeIds: string[], newFile: File) => void;
 }
 
 const numberInput =
   "mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none";
 const label = "block text-sm font-medium text-gray-700";
 
-export function ToolPanel({ tool, files, edits, splitSelection, runJob, onApply, onRequestFiles }: ToolPanelProps) {
+export function ToolPanel({ tool, files, checkedIds, edits, splitSelection, runJob, onApplyBatch, onApplyCombine }: ToolPanelProps) {
+  const meta = TOOLS[tool];
+  const checkedFiles = files.filter((f) => checkedIds.has(f.id));
   const needsImages = tool === "jpg-to-pdf";
-  const filesMatch =
-    files.length > 0 && files.every((f) => (needsImages ? f.type.startsWith("image/") : f.type === "application/pdf"));
+  const matching = checkedFiles.filter((f) => (needsImages ? f.file.type.startsWith("image/") : f.file.type === "application/pdf"));
 
-  if (!filesMatch) {
+  if (meta.scope === "single" && matching.length !== 1) {
     return (
-      <FileDropzone
-        accept={needsImages ? "image/jpeg,image/png" : "application/pdf"}
-        multiple={tool === "merge-pdf" || tool === "jpg-to-pdf"}
-        label={needsImages ? "Select images or drop them here" : "Select a PDF file or drop it here"}
-        hint={tool === "merge-pdf" ? "Choose two or more files." : undefined}
-        onFiles={onRequestFiles}
-      />
+      <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500">
+        Check exactly one PDF above to use {meta.title}.
+      </p>
+    );
+  }
+  if (tool === "merge-pdf" && matching.length < 2) {
+    return <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500">Check at least two PDFs to merge.</p>;
+  }
+  if (meta.scope !== "single" && tool !== "merge-pdf" && matching.length === 0) {
+    return (
+      <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500">
+        Check at least one {needsImages ? "image" : "PDF"} above to use {meta.title}.
+      </p>
     );
   }
 
-  const file = files[0];
-
   switch (tool) {
     case "merge-pdf":
-      return <MergePanel files={files} runJob={runJob} onApply={onApply} />;
+      return <MergePanel files={matching} runJob={runJob} onApply={onApplyCombine} />;
 
     case "jpg-to-pdf":
-      return <JpgToPdfPanel files={files} runJob={runJob} onApply={onApply} />;
+      return <JpgToPdfPanel files={matching} runJob={runJob} onApply={onApplyCombine} />;
 
     case "organize-pdf":
-      return <OrganizeRotatePanel file={file} edits={edits} restricted={false} runJob={runJob} onApply={onApply} />;
+      return (
+        <OrganizeRotatePanel
+          file={matching[0]}
+          edits={edits[matching[0].id] ?? []}
+          restricted={false}
+          runJob={runJob}
+          onApply={onApplyBatch}
+        />
+      );
 
     case "rotate-pdf":
-      return <OrganizeRotatePanel file={file} edits={edits} restricted={true} runJob={runJob} onApply={onApply} />;
+      return (
+        <OrganizeRotatePanel
+          file={matching[0]}
+          edits={edits[matching[0].id] ?? []}
+          restricted={true}
+          runJob={runJob}
+          onApply={onApplyBatch}
+        />
+      );
 
     case "split-pdf":
-      return <SplitPanel file={file} selection={splitSelection} runJob={runJob} />;
+      return <SplitPanel file={matching[0].file} selection={splitSelection} runJob={runJob} />;
 
     case "pdf-to-jpg":
-      return <PdfToJpgPanel file={file} />;
+      return <PdfToJpgPanel files={matching} />;
 
     case "compress-pdf":
       return (
         <WholeDocPanel<{ level: CompressLevel }>
-          file={file}
+          files={matching}
           initialOptions={{ level: "medium" }}
           applyLabel={TOOLS["compress-pdf"].title}
           run={async (f, options) => bytesToFile(await compressPdf(f, options.level), "compressed.pdf", "application/pdf")}
-          onApply={onApply}
+          onApply={onApplyBatch}
           renderFields={({ options, setOptions }) => (
             <div>
               <label className={label}>Compression level</label>
@@ -86,7 +108,7 @@ export function ToolPanel({ tool, files, edits, splitSelection, runJob, onApply,
                     key={level}
                     type="button"
                     onClick={() => setOptions({ level })}
-                    className={`rounded-lg border px-3 py-2 text-sm capitalize ${
+                    className={`rounded-lg border px-3 py-2 text-sm capitalize transition-colors ${
                       options.level === level
                         ? "border-red-600 bg-red-50 text-red-700"
                         : "border-gray-300 text-gray-700 hover:bg-gray-50"
@@ -104,10 +126,10 @@ export function ToolPanel({ tool, files, edits, splitSelection, runJob, onApply,
     case "watermark-pdf":
       return (
         <WholeDocPanel<WatermarkOptions>
-          file={file}
+          files={matching}
           initialOptions={{ text: "CONFIDENTIAL", fontSize: 48, opacity: 0.3, rotationDegrees: 45 }}
           applyLabel="Add Watermark"
-          onApply={onApply}
+          onApply={onApplyBatch}
           run={async (f, options) => {
             const bytes = await f.arrayBuffer();
             const result = await runJob({ type: "watermark", bytes, options });
@@ -168,10 +190,10 @@ export function ToolPanel({ tool, files, edits, splitSelection, runJob, onApply,
     case "page-numbers-pdf":
       return (
         <WholeDocPanel<PageNumberOptions>
-          file={file}
+          files={matching}
           initialOptions={{ startAt: 1, position: "bottom-center", fontSize: 12 }}
           applyLabel="Add Page Numbers"
-          onApply={onApply}
+          onApply={onApplyBatch}
           run={async (f, options) => {
             const bytes = await f.arrayBuffer();
             const result = await runJob({ type: "pageNumbers", bytes, options });
@@ -220,10 +242,10 @@ export function ToolPanel({ tool, files, edits, splitSelection, runJob, onApply,
     case "crop-pdf":
       return (
         <WholeDocPanel<CropOptions>
-          file={file}
+          files={matching}
           initialOptions={{ top: 36, bottom: 36, left: 36, right: 36 }}
           applyLabel="Crop PDF"
-          onApply={onApply}
+          onApply={onApplyBatch}
           run={async (f, options) => {
             const bytes = await f.arrayBuffer();
             const result = await runJob({ type: "crop", bytes, options });
@@ -254,10 +276,10 @@ export function ToolPanel({ tool, files, edits, splitSelection, runJob, onApply,
     case "protect-pdf":
       return (
         <WholeDocPanel<{ password: string; confirmPassword: string }>
-          file={file}
+          files={matching}
           initialOptions={{ password: "", confirmPassword: "" }}
           applyLabel="Protect PDF"
-          onApply={onApply}
+          onApply={onApplyBatch}
           run={async (f, options) => {
             if (!options.password) throw new Error("Enter a password.");
             if (options.password !== options.confirmPassword) throw new Error("Passwords don't match.");
@@ -295,10 +317,10 @@ export function ToolPanel({ tool, files, edits, splitSelection, runJob, onApply,
     case "unlock-pdf":
       return (
         <WholeDocPanel<{ password: string }>
-          file={file}
+          files={matching}
           initialOptions={{ password: "" }}
           applyLabel="Unlock PDF"
-          onApply={onApply}
+          onApply={onApplyBatch}
           run={async (f, options) => {
             if (!options.password) throw new Error("Enter the PDF's current password.");
             assertSafePassword(options.password);

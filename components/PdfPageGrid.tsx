@@ -10,6 +10,8 @@ interface PdfPageGridProps {
   onEditsChange?: (edits: PageEdit[]) => void;
   /** Fired once when a new file's thumbnails finish loading, with the identity edit list. Not a user action. */
   onLoaded?: (edits: PageEdit[]) => void;
+  /** When false, pages are read-only thumbnails (still visible, just not editable). */
+  interactive?: boolean;
   allowReorder?: boolean;
   allowDelete?: boolean;
   allowRotate?: boolean;
@@ -24,6 +26,7 @@ export function PdfPageGrid({
   edits,
   onEditsChange,
   onLoaded,
+  interactive = true,
   allowReorder = true,
   allowDelete = true,
   allowRotate = true,
@@ -143,43 +146,50 @@ export function PdfPageGrid({
 
   if (!file) return null;
   if (loadError) {
-    return <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">{loadError}</p>;
+    return <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{loadError}</p>;
   }
   if (loading && edits.length === 0) {
-    return <p className="text-sm text-gray-500">Loading pages…</p>;
+    return <p className="text-xs text-gray-400">Loading pages…</p>;
   }
 
+  const canReorder = interactive && allowReorder && !selectable;
+  const canRotate = interactive && allowRotate;
+  const canDelete = interactive && allowDelete;
+  const canSelect = interactive && selectable;
+
   return (
-    <div className="space-y-3">
-      {allowRotate && !selectable && (
-        <div className="flex justify-end">
-          <button type="button" onClick={rotateAll} className="text-sm text-gray-600 hover:text-gray-900 underline">
-            Rotate all pages 90°
-          </button>
-        </div>
+    <div className="space-y-2">
+      {canRotate && !selectable && (
+        <button
+          type="button"
+          onClick={rotateAll}
+          className="text-xs text-gray-500 hover:text-gray-800 underline transition-colors"
+        >
+          Rotate all 90°
+        </button>
       )}
-      <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+      <div className="flex flex-col gap-2">
         {edits.map((edit, index) => {
           const isSelected = selected.has(edit.originalIndex);
           return (
             <div
               key={edit.originalIndex}
-              draggable={allowReorder && !selectable}
+              draggable={canReorder}
               onDragStart={() => (dragIndex.current = index)}
               onDragOver={(e) => {
                 e.preventDefault();
-                if (allowReorder && !selectable) setDragOverIndex(index);
+                if (canReorder) setDragOverIndex(index);
               }}
               onDragLeave={() => setDragOverIndex((i) => (i === index ? null : i))}
-              onDrop={() => handleDrop(index)}
-              onClick={selectable ? () => toggleSelected(edit.originalIndex) : undefined}
-              className={`relative rounded-lg border bg-white p-2 shadow-sm transition-all duration-150 ${
-                selectable ? "cursor-pointer" : ""
-              } ${
+              onDrop={() => canReorder && handleDrop(index)}
+              onClick={canSelect ? () => toggleSelected(edit.originalIndex) : undefined}
+              className={`animate-page-in relative rounded-lg border bg-white p-1.5 shadow-sm transition-all duration-150 ${
+                canSelect ? "cursor-pointer" : ""
+              } ${canReorder ? "cursor-grab active:cursor-grabbing" : ""} ${
                 isSelected
                   ? "border-red-500 ring-2 ring-red-500 bg-red-50"
                   : dragOverIndex === index
-                    ? "border-red-300 -translate-y-1 shadow-md"
+                    ? "border-red-300 scale-[1.02] shadow-md"
                     : "border-gray-200"
               }`}
             >
@@ -187,13 +197,13 @@ export function PdfPageGrid({
                 src={thumbnails[edit.originalIndex]}
                 alt={`Page ${edit.originalIndex + 1}`}
                 style={{ transform: `rotate(${edit.rotateBy}deg)` }}
-                className="w-full h-auto"
+                className="w-full h-auto transition-transform duration-200"
               />
-              <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+              <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500">
                 <span>{edit.originalIndex + 1}</span>
-                {selectable ? (
+                {canSelect ? (
                   <span
-                    className={`flex h-4 w-4 items-center justify-center rounded-full border text-[10px] ${
+                    className={`flex h-4 w-4 items-center justify-center rounded-full border text-[10px] transition-colors ${
                       isSelected ? "border-red-500 bg-red-500 text-white" : "border-gray-300"
                     }`}
                     aria-hidden="true"
@@ -201,28 +211,30 @@ export function PdfPageGrid({
                     {isSelected ? "✓" : ""}
                   </span>
                 ) : (
-                  <div className="flex gap-2">
-                    {allowRotate && (
-                      <button
-                        type="button"
-                        onClick={() => rotatePage(index)}
-                        className="hover:text-gray-800"
-                        aria-label="Rotate page"
-                      >
-                        ⟳
-                      </button>
-                    )}
-                    {allowDelete && (
-                      <button
-                        type="button"
-                        onClick={() => removePage(index)}
-                        className="hover:text-red-600"
-                        aria-label="Delete page"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
+                  (canRotate || canDelete) && (
+                    <div className="flex gap-1.5">
+                      {canRotate && (
+                        <button
+                          type="button"
+                          onClick={() => rotatePage(index)}
+                          className="hover:text-gray-800 transition-colors"
+                          aria-label="Rotate page"
+                        >
+                          ⟳
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => removePage(index)}
+                          className="hover:text-red-600 transition-colors"
+                          aria-label="Delete page"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  )
                 )}
               </div>
             </div>

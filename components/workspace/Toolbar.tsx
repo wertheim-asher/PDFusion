@@ -34,7 +34,7 @@ export function Toolbar({
             disabled={!canUndo}
             aria-label="Undo"
             title="Undo"
-            className="rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:hover:bg-transparent"
+            className="rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-30 disabled:hover:bg-transparent"
           >
             ↶ Undo
           </button>
@@ -44,7 +44,7 @@ export function Toolbar({
             disabled={!canRedo}
             aria-label="Redo"
             title="Redo"
-            className="rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:hover:bg-transparent"
+            className="rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-30 disabled:hover:bg-transparent"
           >
             Redo ↷
           </button>
@@ -52,7 +52,7 @@ export function Toolbar({
             <button
               type="button"
               onClick={onStartOver}
-              className="ml-2 rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+              className="ml-2 rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
             >
               Start over
             </button>
@@ -61,20 +61,27 @@ export function Toolbar({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {(Object.keys(TOOLS) as ToolSlug[]).map((slug) => (
-          <button
-            key={slug}
-            type="button"
-            onClick={() => onSelectTool(slug)}
-            className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === slug
-                ? "border-red-600 bg-red-600 text-white"
-                : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-            }`}
-          >
-            {TOOLS[slug].title}
-          </button>
-        ))}
+        {(Object.keys(TOOLS) as ToolSlug[]).map((slug) => {
+          const meta = TOOLS[slug];
+          const isActive = activeTool === slug;
+          return (
+            <button
+              key={slug}
+              type="button"
+              onClick={() => onSelectTool(slug)}
+              aria-pressed={isActive}
+              className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-all duration-150"
+              style={
+                isActive
+                  ? { borderColor: meta.accent, backgroundColor: meta.accent, color: "#fff", transform: "scale(1.03)" }
+                  : { borderColor: `${meta.accent}33`, backgroundColor: `${meta.accent}0d`, color: "#374151" }
+              }
+            >
+              <span aria-hidden="true">{meta.icon}</span>
+              {meta.title}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

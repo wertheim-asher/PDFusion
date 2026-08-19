@@ -1,24 +1,25 @@
 "use client";
 
 import { ReactNode, useState } from "react";
+import type { WorkspaceFile } from "@/hooks/useWorkspace";
 
 interface WholeDocPanelProps<TOptions> {
-  file: File;
+  files: WorkspaceFile[];
   initialOptions: TOptions;
   applyLabel: string;
   renderFields: (args: { options: TOptions; setOptions: (options: TOptions) => void }) => ReactNode;
   run: (file: File, options: TOptions) => Promise<File>;
-  onApply: (file: File) => void;
+  onApply: (updates: { id: string; file: File }[]) => void;
 }
 
 /**
- * Shared shell for tools that take a single PDF + some options and produce a
- * new PDF that replaces the working document (Compress, Watermark, Page
- * Numbers, Crop, Protect, Unlock). Handles the options form, Apply button,
- * and loading/error states; each tool only supplies its fields and a `run`.
+ * Shared shell for tools that take one or more checked PDFs + some options
+ * and produce new PDFs that replace each working document in place
+ * (Compress, Watermark, Page Numbers, Crop, Protect, Unlock). Handles the
+ * options form, "Apply to N files" button, and loading/error states.
  */
 export function WholeDocPanel<TOptions>({
-  file,
+  files,
   initialOptions,
   applyLabel,
   renderFields,
@@ -26,15 +27,19 @@ export function WholeDocPanel<TOptions>({
   onApply,
 }: WholeDocPanelProps<TOptions>) {
   const [options, setOptions] = useState<TOptions>(initialOptions);
-  const [status, setStatus] = useState<"idle" | "working" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "working" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
   const handleApply = async () => {
     setStatus("working");
     setError(null);
     try {
-      const result = await run(file, options);
-      onApply(result);
+      const updates = await Promise.all(
+        files.map(async (wf) => ({ id: wf.id, file: await run(wf.file, options) }))
+      );
+      onApply(updates);
+      setStatus("done");
+      setTimeout(() => setStatus("idle"), 1200);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setStatus("error");
@@ -47,10 +52,15 @@ export function WholeDocPanel<TOptions>({
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
         onClick={handleApply}
-        disabled={status === "working"}
-        className="w-full rounded-lg bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition-colors"
+        disabled={status === "working" || files.length === 0}
+        className="w-full rounded-lg px-6 py-3 font-semibold text-white transition-all duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
+        style={{ backgroundColor: status === "done" ? "#16a34a" : "#dc2626" }}
       >
-        {status === "working" ? "Working…" : applyLabel}
+        {status === "working"
+          ? "Working…"
+          : status === "done"
+            ? "✓ Applied"
+            : `${applyLabel}${files.length > 1 ? ` (${files.length} files)` : ""}`}
       </button>
     </div>
   );

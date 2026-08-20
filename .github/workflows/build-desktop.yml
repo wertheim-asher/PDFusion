@@ -64,6 +64,13 @@ jobs:
         run: |
           mkdir -p flat
           find dist -type f \( -name '*.msi' -o -name '*.exe' -o -name '*.dmg' \) -exec cp {} flat/ \;
+
+      - name: zip macOS app bundle (no-install, double-click alternative to the dmg)
+        run: |
+          while IFS= read -r -d '' app; do
+            base="$(basename "$app" .app)"
+            (cd "$(dirname "$app")" && zip -r -y -q "$GITHUB_WORKSPACE/flat/${base}-macos.app.zip" "$(basename "$app")")
+          done < <(find dist -type d -name '*.app' -print0)
           ls -la flat
 
       - name: publish rolling "latest" release
@@ -75,7 +82,7 @@ jobs:
             Automatically rebuilt from the most recent push to `main`. This is a rolling release — assets here always match the current state of the app.
 
             - **Windows**: run the `.exe` installer, or the raw portable exe from workflow artifacts.
-            - **macOS**: open the `.dmg`, drag to Applications. Not code-signed — right-click → Open the first time to bypass Gatekeeper.
+            - **macOS**: two options — the `.dmg` (mount it, drag to Applications, the familiar way) or `*-macos.app.zip` (unzip, double-click the `.app`, no install step). Neither is code-signed/notarized — right-click → Open the first time to bypass Gatekeeper.
           prerelease: true
           allowUpdates: true
           replacesArtifacts: true

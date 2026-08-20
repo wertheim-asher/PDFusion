@@ -51,3 +51,11 @@ The desktop app has no separate UI code — it bundles the exact same `out/` sta
 - **Desktop app**: [`.github/workflows/build-desktop.yml`](.github/workflows/build-desktop.yml) auto-builds Windows + macOS installers on every push to `main` and publishes them to a rolling [`latest-build` release](https://github.com/wertheim-asher/PDFusion/releases/tag/latest-build) — always the current state of `main`, no manual rebuild needed.
   - macOS builds are ad-hoc signed (not notarized — no Apple Developer account configured), so first launch requires right-click → Open to bypass Gatekeeper.
   - Trigger a build manually from the Actions tab (`workflow_dispatch`) if needed.
+
+### Windows vs macOS: single-file vs app bundle
+
+Windows has a true portable single-file exe (`app.exe`/the NSIS-installed exe) — no install step needed, just run it. macOS has no equivalent: the unit macOS actually runs is always an `.app` bundle (a folder Finder displays as one icon). There's no way to collapse that into one flat file and keep it a working GUI app.
+
+The release publishes two ways to get the macOS app, both no-install in the sense of "no admin prompts, no system changes":
+- `*-macos.app.zip` — unzip (Finder does this on double-click), then double-click the `.app`. Closest thing to the Windows single-file experience.
+- `.dmg` — mount, drag to Applications. The more familiar convention for most Mac users.

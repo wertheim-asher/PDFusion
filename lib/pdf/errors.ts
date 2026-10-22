@@ -28,3 +28,23 @@ export function assertSafePassword(password: string): void {
     throw new InvalidPasswordError();
   }
 }
+
+/**
+ * Turns whatever a tool threw into something a non-technical person can act
+ * on. Errors we raise ourselves are already plain English and pass through;
+ * the opaque ones come from the PDF libraries.
+ */
+export function describeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof PdfToolError) return message;
+  if (/encrypt|password/i.test(message)) {
+    return "This PDF is password-protected. Use “Unlock PDF” on it first, then try again.";
+  }
+  if (/failed to parse|no pdf header|invalid pdf|xref|unexpected token/i.test(message)) {
+    return "This file doesn't look like a valid PDF, or it's damaged.";
+  }
+  if (/memory|allocation|too large/i.test(message)) {
+    return "Your device ran out of memory. Try a smaller file, or process fewer files at once.";
+  }
+  return message || "Something went wrong.";
+}

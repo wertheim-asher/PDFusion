@@ -1,6 +1,13 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
+import { useState, type ReactNode } from "react";
+import { Download, RotateCcw } from "lucide-react";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { useAsyncAction } from "@/hooks/useAsyncAction";
+import { saveBlob } from "@/lib/download";
+import { formatBytes } from "@/lib/files";
+import { ErrorNote, PrimaryAction, WhyDisabled } from "./PanelParts";
 
 interface DownloadResult {
   filename: string;
@@ -16,77 +23,56 @@ interface DownloadPanelProps {
 }
 
 /**
- * Shared shell for tools that produce a different-shaped output than "one
- * new PDF" (Split can produce several files; PDF→JPG produces images) — the
- * result is offered as a download rather than replacing the workspace's
- * working document.
+ * Shared shell for tools whose output isn't "one new PDF in the workspace"
+ * (Split can produce several files; PDF→JPG produces images) — the result is
+ * offered as a download rather than replacing the working document.
  */
 export function DownloadPanel({ applyLabel, applyDisabled, disabledHint, run, children }: DownloadPanelProps) {
-  const [status, setStatus] = useState<"idle" | "working" | "done" | "error">("idle");
-  const [error, setError] = useState<string | null>(null);
+  const { status, error, run: runAction, reset } = useAsyncAction();
   const [result, setResult] = useState<DownloadResult | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!result) return;
-    const url = URL.createObjectURL(result.blob);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDownloadUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [result]);
+  const handleRun = () =>
+    runAction(async () => {
+      setResult(await run());
+    });
 
-  const handleRun = async () => {
-    setStatus("working");
-    setError(null);
-    try {
-      const r = await run();
-      setResult(r);
-      setStatus("done");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setStatus("error");
-    }
-  };
-
-  if (status === "done" && result && downloadUrl) {
+  // Not keyed off `status`: the confirmation flash returns it to idle, but the result must stay until dismissed.
+  if (result) {
     return (
-      <div className="space-y-3 text-center">
-        <p className="font-medium text-gray-900">Done!</p>
-        <a
-          href={downloadUrl}
-          download={result.filename}
-          className="inline-block rounded-lg bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700 transition-colors"
+      <div className="space-y-4">
+        <Alert tone="success" title="All done!">
+          Your file is ready: <strong className="font-semibold">{result.filename}</strong> ({formatBytes(result.blob.size)}).
+        </Alert>
+        <Button
+          variant="primary"
+          size="lg"
+          className="w-full"
+          icon={<Download className="h-6 w-6" aria-hidden="true" />}
+          onClick={() => saveBlob(result.blob, result.filename)}
         >
-          Download {result.filename}
-        </a>
-        <div>
-          <button
-            onClick={() => {
-              setStatus("idle");
-              setResult(null);
-            }}
-            className="text-sm text-gray-500 hover:text-gray-700 underline"
-          >
-            Back
-          </button>
-        </div>
+          Download
+        </Button>
+        <Button
+          className="w-full"
+          variant="secondary"
+          icon={<RotateCcw className="h-5 w-5" aria-hidden="true" />}
+          onClick={() => {
+            setResult(null);
+            reset();
+          }}
+        >
+          Do it again
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {children}
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button
-        onClick={handleRun}
-        disabled={status === "working" || applyDisabled}
-        title={applyDisabled ? disabledHint : undefined}
-        className="w-full rounded-lg bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition-colors"
-      >
-        {status === "working" ? "Working…" : applyLabel}
-      </button>
-      {applyDisabled && disabledHint && <p className="text-center text-xs text-gray-500">{disabledHint}</p>}
+      <ErrorNote message={error} />
+      <PrimaryAction label={applyLabel} status={status} onClick={handleRun} disabled={applyDisabled} />
+      {applyDisabled && disabledHint && <WhyDisabled>{disabledHint}</WhyDisabled>}
     </div>
   );
 }

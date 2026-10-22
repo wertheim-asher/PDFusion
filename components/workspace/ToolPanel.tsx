@@ -1,5 +1,9 @@
 "use client";
 
+import { AlignCenter, AlignLeft, AlignRight, Plus } from "lucide-react";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Field, PasswordInput, Segmented, Slider, TextInput } from "@/components/ui/Form";
 import { compressPdf, type CompressLevel } from "@/lib/pdf/compress";
 import type { CropOptions } from "@/lib/pdf/crop";
 import { bytesToFile } from "@/lib/pdf/bytes";
@@ -8,63 +12,155 @@ import type { WatermarkOptions } from "@/lib/pdf/watermark";
 import type { PageNumberOptions } from "@/lib/pdf/pageNumbers";
 import type { PageEdit } from "@/lib/pdf/organize";
 import type { PdfJob, PdfJobResult } from "@/lib/pdf/jobs";
+import type { ImageInput } from "@/lib/pdf/imagesToPdf";
 import type { WorkspaceFile } from "@/hooks/useWorkspace";
+import { formatBytes, plural, renamePdf } from "@/lib/files";
 import { TOOLS, type ToolSlug, isToolUsable, matchingFiles, toolUnavailableHint } from "@/lib/tools";
-import { WholeDocPanel } from "./panels/WholeDocPanel";
+import { WholeDocPanel, type WholeDocResult } from "./panels/WholeDocPanel";
 import { OrganizeRotatePanel } from "./panels/OrganizeRotatePanel";
 import { SplitPanel } from "./panels/SplitPanel";
 import { PdfToJpgPanel } from "./panels/PdfToJpgPanel";
-import { MergePanel } from "./panels/MergePanel";
-import { JpgToPdfPanel } from "./panels/JpgToPdfPanel";
+import { CombinePanel } from "./panels/CombinePanel";
+import { CropPreview, PageNumberPreview, WatermarkPreview } from "./panels/previews";
 
 interface ToolPanelProps {
   tool: ToolSlug;
   files: WorkspaceFile[];
-  checkedIds: Set<string>;
+  checkedIds: ReadonlySet<string>;
   edits: Record<string, PageEdit[]>;
+  /** Page count of each PDF as first loaded, by file id. */
+  pageCounts: Record<string, number>;
   splitSelection: number[];
   runJob: (job: PdfJob) => Promise<PdfJobResult>;
-  onApplyBatch: (updates: { id: string; file: File }[]) => void;
-  onApplyCombine: (removeIds: string[], newFile: File) => void;
+  onApplyBatch: (updates: { id: string; file: File }[], summary: string) => void;
+  onApplyCombine: (removeIds: string[], newFile: File, summary: string) => void;
+  onSelectOnly: (id: string) => void;
+  onMoveFile: (id: string, direction: -1 | 1) => void;
+  onAddFiles: () => void;
 }
 
-const numberInput =
-  "mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none";
-const label = "block text-sm font-medium text-gray-700";
+const MM_TO_PT = 72 / 25.4;
 
-export function ToolPanel({ tool, files, checkedIds, edits, splitSelection, runJob, onApplyBatch, onApplyCombine }: ToolPanelProps) {
-  const checkedFiles = files.filter((f) => checkedIds.has(f.id)).map((f) => f.file);
-  const matchingWorkspaceFiles = files.filter((f) => checkedIds.has(f.id) && matchingFiles(tool, [f.file]).length > 0);
-  const matching = matchingWorkspaceFiles;
+/** "Compressed “a.pdf”." for one file, "Compressed 3 files." for several. */
+function simpleSummary(verb: string) {
+  return (results: WholeDocResult[]) =>
+    results.length === 1 ? `${verb} “${results[0].name}”.` : `${verb} ${plural(results.length, "file")}.`;
+}
 
-  if (!isToolUsable(tool, checkedFiles)) {
-    return <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500">{toolUnavailableHint(tool)}</p>;
+function compressSummary(results: WholeDocResult[]): string {
+  const before = results.reduce((sum, r) => sum + r.before, 0);
+  const after = results.reduce((sum, r) => sum + r.after, 0);
+  const subject = results.length === 1 ? `“${results[0].name}”` : plural(results.length, "file");
+  if (after >= before) return `${subject} ${results.length === 1 ? "is" : "are"} already as small as can be — nothing to shrink.`;
+  const saved = Math.round((1 - after / before) * 100);
+  return `Compressed ${subject}: ${formatBytes(before)} → ${formatBytes(after)} (${saved}% smaller).`;
+}
+
+export function ToolPanel({
+  tool,
+  files,
+  checkedIds,
+  edits,
+  pageCounts,
+  splitSelection,
+  runJob,
+  onApplyBatch,
+  onApplyCombine,
+  onSelectOnly,
+  onMoveFile,
+  onAddFiles,
+}: ToolPanelProps) {
+  const selected = files.filter((f) => checkedIds.has(f.id));
+  const matching = selected.filter((f) => matchingFiles(tool, [f.file]).length > 0);
+
+  if (files.length === 0) {
+    return (
+      <div className="space-y-4">
+        <Alert tone="info" title="Add a file first">
+          {tool === "jpg-to-pdf" ? "Add one or more JPG or PNG images to get started." : "Add a PDF to use this tool."}
+        </Alert>
+        <Button variant="primary" className="w-full" icon={<Plus className="h-5 w-5" aria-hidden="true" />} onClick={onAddFiles}>
+          Add files
+        </Button>
+      </div>
+    );
   }
+
+  if (!isToolUsable(tool, selected.map((f) => f.file))) {
+    return (
+      <div className="space-y-4">
+        <Alert tone="info" title="Select the right files">
+          {toolUnavailableHint(tool)}
+        </Alert>
+        {TOOLS[tool].scope === "single" && matching.length > 1 && (
+          <div>
+            <p className="mb-2 font-display text-sm font-bold text-ink">Or just use one of your selected files:</p>
+            <ul className="space-y-2">
+              {matching.map((wf) => (
+                <li key={wf.id}>
+                  <Button className="w-full !justify-start" onClick={() => onSelectOnly(wf.id)}>
+                    <span className="truncate">{wf.file.name}</span>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <Button icon={<Plus className="h-5 w-5" aria-hidden="true" />} className="w-full" onClick={onAddFiles}>
+          Add files
+        </Button>
+      </div>
+    );
+  }
+
+  const pdfJob = async (f: File, job: (bytes: ArrayBuffer) => PdfJob, suffix: string): Promise<File> => {
+    const result = await runJob(job(await f.arrayBuffer()));
+    return bytesToFile(new Uint8Array(result.bytes), renamePdf(f.name, suffix), "application/pdf");
+  };
 
   switch (tool) {
     case "merge-pdf":
-      return <MergePanel files={matching} runJob={runJob} onApply={onApplyCombine} />;
-
-    case "jpg-to-pdf":
-      return <JpgToPdfPanel files={matching} runJob={runJob} onApply={onApplyCombine} />;
-
-    case "organize-pdf":
       return (
-        <OrganizeRotatePanel
-          file={matching[0]}
-          edits={edits[matching[0].id] ?? []}
-          restricted={false}
-          runJob={runJob}
-          onApply={onApplyBatch}
+        <CombinePanel
+          files={matching}
+          intro="Your PDFs will be joined in this order. Use the arrows to change it."
+          cta={TOOLS["merge-pdf"].cta}
+          run={async (list) => runJob({ type: "merge", bytesList: await Promise.all(list.map((wf) => wf.file.arrayBuffer())) })}
+          onApply={onApplyCombine}
+          onMove={onMoveFile}
+          summarize={(count, name) => `Merged ${plural(count, "PDF")} into “${name}”.`}
         />
       );
 
+    case "jpg-to-pdf":
+      return (
+        <CombinePanel
+          files={matching}
+          intro="Each image becomes a page, in this order. Use the arrows to change it."
+          cta={TOOLS["jpg-to-pdf"].cta}
+          run={async (list) => {
+            const images: ImageInput[] = await Promise.all(
+              list.map(async (wf) => ({
+                bytes: await wf.file.arrayBuffer(),
+                type: wf.file.type === "image/png" ? ("image/png" as const) : ("image/jpeg" as const),
+              }))
+            );
+            return runJob({ type: "imagesToPdf", images });
+          }}
+          onApply={onApplyCombine}
+          onMove={onMoveFile}
+          summarize={(count, name) => `Turned ${plural(count, "image")} into “${name}”.`}
+        />
+      );
+
+    case "organize-pdf":
     case "rotate-pdf":
       return (
         <OrganizeRotatePanel
           file={matching[0]}
           edits={edits[matching[0].id] ?? []}
-          restricted={true}
+          pageCount={pageCounts[matching[0].id]}
+          restricted={tool === "rotate-pdf"}
           runJob={runJob}
           onApply={onApplyBatch}
         />
@@ -81,28 +177,36 @@ export function ToolPanel({ tool, files, checkedIds, edits, splitSelection, runJ
         <WholeDocPanel<{ level: CompressLevel }>
           files={matching}
           initialOptions={{ level: "medium" }}
-          applyLabel={TOOLS["compress-pdf"].title}
-          run={async (f, options) => bytesToFile(await compressPdf(f, options.level), "compressed.pdf", "application/pdf")}
+          applyLabel={TOOLS["compress-pdf"].cta}
+          doneLabel="Compressed"
+          summarize={compressSummary}
           onApply={onApplyBatch}
+          run={async (f, options) => {
+            const bytes = await compressPdf(f, options.level);
+            // Nothing gained: leave the file exactly as it is rather than swapping in a copy.
+            if (bytes.byteLength >= f.size) return f;
+            return bytesToFile(bytes, renamePdf(f.name, "-compressed"), "application/pdf");
+          }}
           renderFields={({ options, setOptions }) => (
-            <div>
-              <label className={label}>Compression level</label>
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {(["low", "medium", "high"] as const).map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    onClick={() => setOptions({ level })}
-                    className={`rounded-lg border px-3 py-2 text-sm capitalize transition-colors ${
-                      options.level === level
-                        ? "border-red-600 bg-red-50 text-red-700"
-                        : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                    }`}
-                  >
-                    {level === "low" ? "Smallest file" : level === "high" ? "Best quality" : "Balanced"}
-                  </button>
-                ))}
+            <div className="space-y-4">
+              <div>
+                <p className="mb-2 font-display text-[15px] font-bold text-ink">How much to shrink it</p>
+                <Segmented<CompressLevel>
+                  label="Compression level"
+                  layout="stack"
+                  value={options.level}
+                  onChange={(level) => setOptions({ level })}
+                  options={[
+                    { value: "low", label: "Smallest file", description: "Strongest squeeze. Images look softer." },
+                    { value: "medium", label: "Balanced", description: "A good mix of size and quality." },
+                    { value: "high", label: "Best quality", description: "Gentler squeeze. Images stay sharp." },
+                  ]}
+                />
               </div>
+              <Alert tone="info">
+                Compressing turns each page into a picture, so text on the page can no longer be selected or searched.
+                It works best on scans and image-heavy PDFs.
+              </Alert>
             </div>
           )}
         />
@@ -113,60 +217,60 @@ export function ToolPanel({ tool, files, checkedIds, edits, splitSelection, runJ
         <WholeDocPanel<WatermarkOptions>
           files={matching}
           initialOptions={{ text: "CONFIDENTIAL", fontSize: 48, opacity: 0.3, rotationDegrees: 45 }}
-          applyLabel="Add Watermark"
+          applyLabel={TOOLS["watermark-pdf"].cta}
+          doneLabel="Added"
+          summarize={simpleSummary("Added a watermark to")}
           onApply={onApplyBatch}
-          run={async (f, options) => {
-            const bytes = await f.arrayBuffer();
-            const result = await runJob({ type: "watermark", bytes, options });
-            return bytesToFile(new Uint8Array(result.bytes), result.filename, "application/pdf");
-          }}
+          blockedReason={(o) => (o.text.trim() ? null : "Type the text to stamp on every page.")}
+          run={(f, options) => pdfJob(f, (bytes) => ({ type: "watermark", bytes, options }), "-watermarked")}
           renderFields={({ options, setOptions }) => (
-            <div className="space-y-4">
-              <div>
-                <label className={label}>Watermark text</label>
-                <input
-                  type="text"
-                  value={options.text}
-                  onChange={(e) => setOptions({ ...options, text: e.target.value })}
-                  className={numberInput}
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className={label}>Font size</label>
-                  <input
-                    type="number"
-                    min={8}
-                    max={200}
-                    value={options.fontSize}
-                    onChange={(e) => setOptions({ ...options, fontSize: Number(e.target.value) })}
-                    className={numberInput}
+            <div className="space-y-5">
+              <WatermarkPreview
+                text={options.text}
+                fontSize={options.fontSize}
+                opacity={options.opacity}
+                rotation={options.rotationDegrees}
+              />
+              <Field label="Watermark text">
+                {({ id, describedBy }) => (
+                  <TextInput
+                    id={id}
+                    aria-describedby={describedBy}
+                    type="text"
+                    value={options.text}
+                    onChange={(e) => setOptions({ ...options, text: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className={label}>Opacity</label>
-                  <input
-                    type="number"
-                    min={0.05}
-                    max={1}
-                    step={0.05}
-                    value={options.opacity}
-                    onChange={(e) => setOptions({ ...options, opacity: Number(e.target.value) })}
-                    className={numberInput}
+                )}
+              </Field>
+              <Field label="Size" value={`${options.fontSize} pt`}>
+                {({ id }) => (
+                  <Slider id={id} min={12} max={150} value={options.fontSize} onChange={(fontSize) => setOptions({ ...options, fontSize })} />
+                )}
+              </Field>
+              <Field label="Strength" value={`${Math.round(options.opacity * 100)}%`}>
+                {({ id }) => (
+                  <Slider
+                    id={id}
+                    min={5}
+                    max={100}
+                    step={5}
+                    value={Math.round(options.opacity * 100)}
+                    onChange={(pct) => setOptions({ ...options, opacity: pct / 100 })}
                   />
-                </div>
-                <div>
-                  <label className={label}>Rotation °</label>
-                  <input
-                    type="number"
+                )}
+              </Field>
+              <Field label="Angle" value={`${options.rotationDegrees}°`}>
+                {({ id }) => (
+                  <Slider
+                    id={id}
                     min={-90}
                     max={90}
+                    step={5}
                     value={options.rotationDegrees}
-                    onChange={(e) => setOptions({ ...options, rotationDegrees: Number(e.target.value) })}
-                    className={numberInput}
+                    onChange={(rotationDegrees) => setOptions({ ...options, rotationDegrees })}
                   />
-                </div>
-              </div>
+                )}
+              </Field>
             </div>
           )}
         />
@@ -177,81 +281,98 @@ export function ToolPanel({ tool, files, checkedIds, edits, splitSelection, runJ
         <WholeDocPanel<PageNumberOptions>
           files={matching}
           initialOptions={{ startAt: 1, position: "bottom-center", fontSize: 12 }}
-          applyLabel="Add Page Numbers"
+          applyLabel={TOOLS["page-numbers-pdf"].cta}
+          doneLabel="Numbered"
+          summarize={simpleSummary("Numbered the pages of")}
           onApply={onApplyBatch}
-          run={async (f, options) => {
-            const bytes = await f.arrayBuffer();
-            const result = await runJob({ type: "pageNumbers", bytes, options });
-            return bytesToFile(new Uint8Array(result.bytes), result.filename, "application/pdf");
-          }}
+          run={(f, options) => pdfJob(f, (bytes) => ({ type: "pageNumbers", bytes, options }), "-numbered")}
           renderFields={({ options, setOptions }) => (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-5">
+              <PageNumberPreview position={options.position} fontSize={options.fontSize} startAt={options.startAt} />
               <div>
-                <label className={label}>Start at</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={options.startAt}
-                  onChange={(e) => setOptions({ ...options, startAt: Number(e.target.value) })}
-                  className={numberInput}
-                />
-              </div>
-              <div>
-                <label className={label}>Position</label>
-                <select
+                <p className="mb-2 font-display text-[15px] font-bold text-ink">Where on the page</p>
+                <Segmented<PageNumberOptions["position"]>
+                  label="Position"
                   value={options.position}
-                  onChange={(e) => setOptions({ ...options, position: e.target.value as PageNumberOptions["position"] })}
-                  className={numberInput}
-                >
-                  <option value="bottom-left">Bottom left</option>
-                  <option value="bottom-center">Bottom center</option>
-                  <option value="bottom-right">Bottom right</option>
-                </select>
-              </div>
-              <div>
-                <label className={label}>Font size</label>
-                <input
-                  type="number"
-                  min={6}
-                  max={48}
-                  value={options.fontSize}
-                  onChange={(e) => setOptions({ ...options, fontSize: Number(e.target.value) })}
-                  className={numberInput}
+                  onChange={(position) => setOptions({ ...options, position })}
+                  options={[
+                    { value: "bottom-left", label: "Left", icon: <AlignLeft className="h-5 w-5" aria-hidden="true" /> },
+                    { value: "bottom-center", label: "Center", icon: <AlignCenter className="h-5 w-5" aria-hidden="true" /> },
+                    { value: "bottom-right", label: "Right", icon: <AlignRight className="h-5 w-5" aria-hidden="true" /> },
+                  ]}
                 />
               </div>
+              <Field label="Start counting at" hint="The first page gets this number.">
+                {({ id, describedBy }) => (
+                  <TextInput
+                    id={id}
+                    aria-describedby={describedBy}
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={options.startAt}
+                    onChange={(e) => setOptions({ ...options, startAt: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+                  />
+                )}
+              </Field>
+              <Field label="Number size" value={`${options.fontSize} pt`}>
+                {({ id }) => (
+                  <Slider id={id} min={6} max={48} value={options.fontSize} onChange={(fontSize) => setOptions({ ...options, fontSize })} />
+                )}
+              </Field>
             </div>
           )}
         />
       );
 
     case "crop-pdf":
+      // Margins are entered in millimetres (people don't think in PDF points) and converted when applied.
       return (
         <WholeDocPanel<CropOptions>
           files={matching}
-          initialOptions={{ top: 36, bottom: 36, left: 36, right: 36 }}
-          applyLabel="Crop PDF"
+          initialOptions={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          applyLabel={TOOLS["crop-pdf"].cta}
+          doneLabel="Cropped"
+          summarize={simpleSummary("Cropped")}
           onApply={onApplyBatch}
-          run={async (f, options) => {
-            const bytes = await f.arrayBuffer();
-            const result = await runJob({ type: "crop", bytes, options });
-            return bytesToFile(new Uint8Array(result.bytes), result.filename, "application/pdf");
-          }}
+          run={(f, options) =>
+            pdfJob(
+              f,
+              (bytes) => ({
+                type: "crop",
+                bytes,
+                options: {
+                  top: options.top * MM_TO_PT,
+                  bottom: options.bottom * MM_TO_PT,
+                  left: options.left * MM_TO_PT,
+                  right: options.right * MM_TO_PT,
+                },
+              }),
+              "-cropped"
+            )
+          }
           renderFields={({ options, setOptions }) => (
-            <div className="space-y-2">
-              <label className={label}>Margins to trim (points, 72pt = 1in)</label>
-              <div className="grid grid-cols-4 gap-4">
-                {(["top", "bottom", "left", "right"] as const).map((side) => (
-                  <div key={side}>
-                    <label className="block text-xs text-gray-500 capitalize">{side}</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={options[side]}
-                      onChange={(e) => setOptions({ ...options, [side]: Number(e.target.value) })}
-                      className={numberInput}
-                    />
-                  </div>
-                ))}
+            <div className="space-y-5">
+              <CropPreview {...options} />
+              <div>
+                <p className="mb-2 font-display text-[15px] font-bold text-ink">How much to trim (mm)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {(["top", "bottom", "left", "right"] as const).map((side) => (
+                    <Field key={side} label={side[0].toUpperCase() + side.slice(1)}>
+                      {({ id }) => (
+                        <TextInput
+                          id={id}
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step={1}
+                          value={options[side]}
+                          onChange={(e) => setOptions({ ...options, [side]: Math.max(0, Number(e.target.value) || 0) })}
+                        />
+                      )}
+                    </Field>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -263,37 +384,55 @@ export function ToolPanel({ tool, files, checkedIds, edits, splitSelection, runJ
         <WholeDocPanel<{ password: string; confirmPassword: string }>
           files={matching}
           initialOptions={{ password: "", confirmPassword: "" }}
-          applyLabel="Protect PDF"
+          applyLabel={TOOLS["protect-pdf"].cta}
+          doneLabel="Protected"
+          summarize={simpleSummary("Protected")}
           onApply={onApplyBatch}
+          blockedReason={(o) => {
+            if (!o.password) return "Choose a password to continue.";
+            if (o.password.includes(",")) return "Fix the password above to continue.";
+            if (o.password !== o.confirmPassword) return "Both passwords need to match to continue.";
+            return null;
+          }}
           run={async (f, options) => {
             if (!options.password) throw new Error("Enter a password.");
             if (options.password !== options.confirmPassword) throw new Error("Passwords don't match.");
             assertSafePassword(options.password);
-            const bytes = await f.arrayBuffer();
-            const result = await runJob({ type: "protect", bytes, options: { userPassword: options.password } });
-            return bytesToFile(new Uint8Array(result.bytes), result.filename, "application/pdf");
+            return pdfJob(f, (bytes) => ({ type: "protect", bytes, options: { userPassword: options.password } }), "-protected");
           }}
           renderFields={({ options, setOptions }) => (
-            <div className="space-y-4">
-              <div>
-                <label className={label}>Password</label>
-                <input
-                  type="password"
-                  value={options.password}
-                  onChange={(e) => setOptions({ ...options, password: e.target.value })}
-                  className={numberInput}
-                />
-              </div>
-              <div>
-                <label className={label}>Confirm password</label>
-                <input
-                  type="password"
-                  value={options.confirmPassword}
-                  onChange={(e) => setOptions({ ...options, confirmPassword: e.target.value })}
-                  className={numberInput}
-                />
-              </div>
-              <p className="text-xs text-gray-500">Passwords can&apos;t contain a comma.</p>
+            <div className="space-y-5">
+              <Field
+                label="Password"
+                error={options.password.includes(",") ? "Passwords can't contain a comma. Please remove it." : null}
+              >
+                {({ id, describedBy }) => (
+                  <PasswordInput
+                    id={id}
+                    aria-describedby={describedBy}
+                    aria-invalid={options.password.includes(",") || undefined}
+                    value={options.password}
+                    onChange={(e) => setOptions({ ...options, password: e.target.value })}
+                  />
+                )}
+              </Field>
+              <Field
+                label="Type it again"
+                error={options.confirmPassword && options.confirmPassword !== options.password ? "That doesn't match yet." : null}
+              >
+                {({ id, describedBy }) => (
+                  <PasswordInput
+                    id={id}
+                    aria-describedby={describedBy}
+                    aria-invalid={(options.confirmPassword && options.confirmPassword !== options.password) || undefined}
+                    value={options.confirmPassword}
+                    onChange={(e) => setOptions({ ...options, confirmPassword: e.target.value })}
+                  />
+                )}
+              </Field>
+              <Alert tone="warn" title="Don't lose it">
+                There&apos;s no way to recover a forgotten password — not even by us. Keep it somewhere safe.
+              </Alert>
             </div>
           )}
         />
@@ -304,25 +443,27 @@ export function ToolPanel({ tool, files, checkedIds, edits, splitSelection, runJ
         <WholeDocPanel<{ password: string }>
           files={matching}
           initialOptions={{ password: "" }}
-          applyLabel="Unlock PDF"
+          applyLabel={TOOLS["unlock-pdf"].cta}
+          doneLabel="Unlocked"
+          summarize={simpleSummary("Unlocked")}
           onApply={onApplyBatch}
+          blockedReason={(o) => (o.password ? null : "Enter the PDF's current password to continue.")}
           run={async (f, options) => {
             if (!options.password) throw new Error("Enter the PDF's current password.");
             assertSafePassword(options.password);
-            const bytes = await f.arrayBuffer();
-            const result = await runJob({ type: "unlock", bytes, password: options.password });
-            return bytesToFile(new Uint8Array(result.bytes), result.filename, "application/pdf");
+            return pdfJob(f, (bytes) => ({ type: "unlock", bytes, password: options.password }), "-unlocked");
           }}
           renderFields={({ options, setOptions }) => (
-            <div>
-              <label className={label}>Current password</label>
-              <input
-                type="password"
-                value={options.password}
-                onChange={(e) => setOptions({ password: e.target.value })}
-                className={numberInput}
-              />
-            </div>
+            <Field label="Current password" hint="The password this PDF currently asks for when you open it.">
+              {({ id, describedBy }) => (
+                <PasswordInput
+                  id={id}
+                  aria-describedby={describedBy}
+                  value={options.password}
+                  onChange={(e) => setOptions({ password: e.target.value })}
+                />
+              )}
+            </Field>
           )}
         />
       );

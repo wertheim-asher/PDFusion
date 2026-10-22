@@ -1,6 +1,8 @@
 "use client";
 
 import { DownloadPanel } from "./DownloadPanel";
+import { plural } from "@/lib/files";
+import { TOOLS } from "@/lib/tools";
 import type { PageRange } from "@/lib/pdf/split";
 import type { PdfJob } from "@/lib/pdf/jobs";
 
@@ -28,18 +30,12 @@ function toRanges(selection: number[]): PageRange[] {
 
 export function SplitPanel({ file, selection, runJob }: SplitPanelProps) {
   const ranges = toRanges(selection);
-  const summary =
-    ranges.length === 0
-      ? `Click pages on ${file.name} in the file list to choose which ones to extract.`
-      : `${selection.length} page${selection.length === 1 ? "" : "s"} selected → ${ranges.length} file${
-          ranges.length === 1 ? "" : "s"
-        }.`;
 
   return (
     <DownloadPanel
-      applyLabel="Split PDF"
+      applyLabel={TOOLS["split-pdf"].cta}
       applyDisabled={ranges.length === 0}
-      disabledHint="Select at least one page first."
+      disabledHint="Click at least one page first."
       run={async () => {
         const bytes = await file.arrayBuffer();
         const result = await runJob({ type: "split", bytes, ranges });
@@ -50,10 +46,26 @@ export function SplitPanel({ file, selection, runJob }: SplitPanelProps) {
         };
       }}
     >
-      <p className="text-sm text-gray-500">{summary}</p>
-      <p className="text-xs text-gray-400">
-        Each contiguous run of selected pages becomes its own PDF; multiple files are bundled into a zip.
-      </p>
+      {ranges.length === 0 ? (
+        <p className="text-[15px] text-ink-2">
+          Click the pages you want to pull out of <strong className="font-semibold text-ink">{file.name}</strong>. They
+          open in the middle of the screen.
+        </p>
+      ) : (
+        <div>
+          <p className="mb-2 text-[15px] text-ink-2">
+            {plural(selection.length, "page")} selected. You&apos;ll get {plural(ranges.length, "file")}:
+          </p>
+          <ul className="space-y-1.5">
+            {ranges.map((r) => (
+              <li key={r.from} className="rounded-xl border-2 border-line bg-paper px-3 py-2 text-[15px] font-medium text-ink">
+                {r.from === r.to ? `Page ${r.from}` : `Pages ${r.from}–${r.to}`}
+              </li>
+            ))}
+          </ul>
+          {ranges.length > 1 && <p className="mt-2 text-sm text-ink-3">Several files are bundled into one zip.</p>}
+        </div>
+      )}
     </DownloadPanel>
   );
 }

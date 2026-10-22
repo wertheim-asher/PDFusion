@@ -1,28 +1,116 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Design tokens. The look is "paper and ink": a warm paper desk, near-black
+ * ink for structure and text, and the logo's red as the single action color.
+ * Contrast notes (WCAG): ink on paper ≈ 15:1, ink-2 ≈ 8:1, ink-3 ≈ 5:1,
+ * white on brand ≈ 4.8:1. Brand-colored *text* uses brand-deep (≈ 5.3:1).
+ */
+@theme {
+  --color-paper: #f6f0e4;
+  --color-paper-2: #ece4d2;
+  --color-card: #fffdf8;
+  --color-ink: #1c1a15;
+  --color-ink-2: #4b463a;
+  --color-ink-3: #6e6757;
+  --color-line: #d8cfbb;
+  --color-brand: #dc2626;
+  --color-brand-deep: #b91c1c;
+  --color-brand-tint: #fde8e3;
+  --color-marker: #ffd84d;
+  --color-ok: #17794a;
+  --color-ok-tint: #e1f3e8;
+  --color-warn: #8a5300;
+  --color-warn-tint: #fff1cc;
+
+  --animate-card-in: card-in 0.2s ease-out;
+  --animate-page-in: page-in 0.18s ease-out;
+  --animate-fade-in: fade-in 0.12s ease-out;
+  --animate-pop: pop 0.25s ease-out;
+  --animate-toast-in: toast-in 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+
+/* One clearly visible focus ring everywhere, for keyboard users. */
+:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 3px;
+}
+
+/* The workspace "desk": a faint dot grid behind the document cards. */
+.desk {
+  background-color: var(--color-paper);
+  background-image: radial-gradient(color-mix(in srgb, var(--color-ink) 16%, transparent) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+
+/* Range inputs with a thumb big enough to grab comfortably. */
+input[type="range"].slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"].slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-ink) var(--fill, 50%),
+    var(--color-line) var(--fill, 50%)
+  );
+}
+input[type="range"].slider::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-line);
+}
+input[type="range"].slider::-moz-range-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-ink);
+}
+input[type="range"].slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -9px;
+  border-radius: 999px;
+  border: 3px solid var(--color-ink);
+  background: var(--color-brand);
+  box-shadow: 0 2px 0 0 var(--color-ink);
+}
+input[type="range"].slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 3px solid var(--color-ink);
+  background: var(--color-brand);
+  box-shadow: 0 2px 0 0 var(--color-ink);
 }
 
 @keyframes page-in {
@@ -35,9 +123,6 @@ body {
     transform: scale(1);
   }
 }
-.animate-page-in {
-  animation: page-in 0.18s ease-out;
-}
 
 @keyframes card-in {
   from {
@@ -48,9 +133,6 @@ body {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-}
-.animate-card-in {
-  animation: card-in 0.2s ease-out;
 }
 
 @keyframes pop {
@@ -64,9 +146,6 @@ body {
     transform: scale(1);
   }
 }
-.animate-pop {
-  animation: pop 0.25s ease-out;
-}
 
 @keyframes fade-in {
   from {
@@ -76,6 +155,24 @@ body {
     opacity: 1;
   }
 }
-.animate-fade-in {
-  animation: fade-in 0.12s ease-out;
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

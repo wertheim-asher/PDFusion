@@ -47,3 +47,9 @@ export function formatBytes(bytes: number): string {
 export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
+
+/** "report.pdf" + "-compressed" → "report-compressed.pdf", without stacking the same suffix twice. */
+export function renamePdf(originalName: string, suffix: string): string {
+  const base = originalName.replace(/\.pdf$/i, "");
+  return `${base.endsWith(suffix) ? base : base + suffix}.pdf`;
+}

@@ -1,30 +1,95 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import JSZip from "jszip";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft, Redo2, ShieldCheck, Undo2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { ToolIcon } from "@/components/ToolIcon";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { ToastHost, useToast } from "@/components/ui/Toast";
 import { usePdfWorker } from "@/hooks/usePdfWorker";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { downloadFiles } from "@/lib/download";
+import { ACCEPT_ATTR, plural, splitAcceptedFiles } from "@/lib/files";
 import { TOOLS, type ToolSlug } from "@/lib/tools";
-import { splitAcceptedFiles } from "@/lib/files";
-import { ToolSidebar } from "./ToolSidebar";
-import { FilesRow } from "./FilesRow";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { DropOverlay } from "./DropOverlay";
+import { FilesGrid } from "./FilesGrid";
 import { GlobalControls } from "./GlobalControls";
 import { ToolPanel } from "./ToolPanel";
+import { ToolSidebar } from "./ToolSidebar";
 
 const LARGE_FILE_WARNING_BYTES = 150 * 1024 * 1024;
+
+/** "⌘" on Apple platforms, "Ctrl+" elsewhere — resolved after mount so server and client markup agree. */
+function useModKey(): string {
+  const [mod, setMod] = useState("Ctrl+");
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (/Mac|iPhone|iPad/.test(navigator.platform)) setMod("⌘");
+  }, []);
+  return mod;
+}
 
 export function Workspace() {
   const ws = useWorkspace();
   const { runJob } = usePdfWorker();
-  const [splitSelectionByFile, setSplitSelectionByFile] = useState<Record<string, number[]>>({});
-  const [skippedNames, setSkippedNames] = useState<string[]>([]);
+  const { toast, show: showToast, dismiss: dismissToast } = useToast();
+  const mod = useModKey();
 
-  const addFiles = (incoming: File[]) => {
-    const { accepted, rejected } = splitAcceptedFiles(incoming);
-    setSkippedNames(rejected.map((f) => f.name));
-    ws.addFiles(accepted);
+  const [splitSelectionByFile, setSplitSelectionByFile] = useState<Record<string, number[]>>({});
+  const [pageCounts, setPageCounts] = useState<Record<string, number>>({});
+  const [confirmingStartOver, setConfirmingStartOver] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+
+  const openPicker = useCallback(() => inputRef.current?.click(), []);
+
+  const addFiles = useCallback(
+    (incoming: File[]) => {
+      const { accepted, rejected } = splitAcceptedFiles(incoming);
+      ws.addFiles(accepted);
+      if (rejected.length > 0) {
+        const names = rejected.length <= 2 ? rejected.map((f) => `“${f.name}”`).join(" and ") : plural(rejected.length, "file");
+        showToast(`Skipped ${names} — only PDF, JPG and PNG files work here.`, { tone: "warn" });
+      }
+    },
+    [ws, showToast]
+  );
+
+  const meta = ws.activeTool ? TOOLS[ws.activeTool] : null;
+  const selectedCount = ws.checked.size;
+  const singleSelectedId = selectedCount === 1 ? Array.from(ws.checked)[0] : null;
+  const splitSelection = singleSelectedId ? (splitSelectionByFile[singleSelectedId] ?? []) : [];
+  const selectedWorkspaceFiles = ws.files.filter((f) => ws.checked.has(f.id));
+
+  const undoAction = { label: "Undo", onClick: ws.undo };
+
+  const deleteFiles = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const names = ws.files.filter((f) => ids.includes(f.id)).map((f) => f.file.name);
+      ws.removeFiles(ids);
+      showToast(ids.length === 1 ? `Removed “${names[0]}”.` : `Removed ${plural(ids.length, "file")}.`, {
+        tone: "info",
+        action: { label: "Undo", onClick: ws.undo },
+      });
+    },
+    [ws, showToast]
+  );
+
+  /** Merge/convert order follows the file list, so moving a file means swapping places with its neighbour among the selected ones. */
+  const moveSelectedFile = (id: string, direction: -1 | 1) => {
+    const ids = ws.files.filter((f) => ws.checked.has(f.id)).map((f) => f.id);
+    const at = ids.indexOf(id);
+    const neighbour = ids[at + direction];
+    if (at === -1 || neighbour === undefined) return;
+    ws.reorderFiles(
+      ws.files.findIndex((f) => f.id === id),
+      ws.files.findIndex((f) => f.id === neighbour)
+    );
   };
 
   useEffect(() => {
@@ -43,127 +108,262 @@ export function Workspace() {
     setSplitSelectionByFile({});
   }, [ws.activeTool]);
 
-  const meta = ws.activeTool ? TOOLS[ws.activeTool] : null;
-  const singleCheckedId = ws.checked.size === 1 ? Array.from(ws.checked)[0] : null;
-  const splitSelection = singleCheckedId ? (splitSelectionByFile[singleCheckedId] ?? []) : [];
-  const checkedWorkspaceFiles = ws.files.filter((f) => ws.checked.has(f.id));
+  useEffect(() => {
+    // On narrow screens the options panel sits below the file list; bring it into view.
+    if (ws.activeTool && window.matchMedia("(max-width: 1023px)").matches) {
+      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [ws.activeTool]);
 
-  const downloadChecked = async () => {
-    if (checkedWorkspaceFiles.length === 1) {
-      const wf = checkedWorkspaceFiles[0];
-      const url = URL.createObjectURL(wf.file);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = wf.file.name;
-      a.click();
-      URL.revokeObjectURL(url);
-      return;
-    }
-    const zip = new JSZip();
-    const usedNames = new Set<string>();
-    for (const wf of checkedWorkspaceFiles) {
-      let name = wf.file.name;
-      let i = 2;
-      while (usedNames.has(name)) {
-        name = wf.file.name.replace(/(\.[^.]+)?$/, (ext) => ` (${i})${ext}`);
-        i++;
+  // Latest handlers for the long-lived window listeners below, without re-subscribing every render.
+  const latest = useRef({ addFiles, deleteFiles, openPicker, ws, confirmingStartOver });
+  useEffect(() => {
+    latest.current = { addFiles, deleteFiles, openPicker, ws, confirmingStartOver };
+  });
+
+  // Drop files anywhere on the page.
+  useEffect(() => {
+    let depth = 0;
+    const carriesFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    const onEnter = (e: DragEvent) => {
+      if (!carriesFiles(e)) return;
+      depth += 1;
+      setDragging(true);
+    };
+    const onLeave = (e: DragEvent) => {
+      if (!carriesFiles(e)) return;
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setDragging(false);
+    };
+    const onOver = (e: DragEvent) => {
+      if (carriesFiles(e)) e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      depth = 0;
+      setDragging(false);
+      latest.current.addFiles(Array.from(e.dataTransfer?.files ?? []));
+    };
+    window.addEventListener("dragenter", onEnter);
+    window.addEventListener("dragleave", onLeave);
+    window.addEventListener("dragover", onOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onEnter);
+      window.removeEventListener("dragleave", onLeave);
+      window.removeEventListener("dragover", onOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, []);
+
+  // Keyboard shortcuts. Text fields keep their own Ctrl+Z/Ctrl+A.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const { ws, openPicker, deleteFiles, confirmingStartOver } = latest.current;
+      if (confirmingStartOver) return;
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
+      const hasMod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      if (hasMod && key === "o") {
+        e.preventDefault();
+        openPicker();
+      } else if (typing) {
+        return;
+      } else if (hasMod && key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) ws.redo();
+        else ws.undo();
+      } else if (hasMod && key === "y") {
+        e.preventDefault();
+        ws.redo();
+      } else if (hasMod && key === "a" && ws.files.length > 0) {
+        e.preventDefault();
+        ws.selectAll();
+      } else if (e.key === "Delete" && ws.checked.size > 0) {
+        e.preventDefault();
+        deleteFiles(Array.from(ws.checked));
       }
-      usedNames.add(name);
-      zip.file(name, wf.file);
-    }
-    const blob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "files.zip";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const hasLargeFile = ws.files.some((f) => f.file.size > LARGE_FILE_WARNING_BYTES);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-zinc-50">
-      <header className="shrink-0 border-b border-gray-200 bg-white px-4 py-3">
-        <Link href="/">
-          <Logo iconClassName="h-6 w-6" textClassName="text-lg" />
+    <div className="flex min-h-dvh flex-col lg:h-dvh lg:overflow-hidden">
+      <header className="flex h-16 shrink-0 items-center gap-3 border-b-2 border-ink bg-card px-4 lg:px-6">
+        <Link href="/" aria-label="PDFusion home" className="rounded-lg">
+          <Logo />
         </Link>
+        <p className="ml-3 hidden items-center gap-2 rounded-full border-2 border-ok/40 bg-ok-tint px-3.5 py-1.5 text-sm font-semibold text-ok md:flex">
+          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+          Files stay on your device
+        </p>
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            icon={<Undo2 className="h-5 w-5" aria-hidden="true" />}
+            onClick={ws.undo}
+            disabled={!ws.canUndo}
+            title={`Undo (${mod}Z)`}
+            aria-label="Undo"
+          >
+            <span className="hidden md:inline">Undo</span>
+          </Button>
+          <Button
+            icon={<Redo2 className="h-5 w-5" aria-hidden="true" />}
+            onClick={ws.redo}
+            disabled={!ws.canRedo}
+            title={`Redo (${mod}Shift+Z)`}
+            aria-label="Redo"
+          >
+            <span className="hidden md:inline">Redo</span>
+          </Button>
+          {ws.files.length > 0 && (
+            <Button variant="ghost" onClick={() => setConfirmingStartOver(true)} title="Remove everything and begin again">
+              Start over
+            </Button>
+          )}
+        </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-white">
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[17rem_minmax(0,1fr)_20rem] xl:grid-cols-[19rem_minmax(0,1fr)_23rem]">
+        <aside className="order-2 border-t-2 border-ink bg-card lg:order-1 lg:overflow-y-auto lg:border-r lg:border-t-0 lg:border-line">
           <ToolSidebar
             activeTool={ws.activeTool}
             onSelectTool={ws.setActiveTool}
-            checkedFiles={checkedWorkspaceFiles.map((f) => f.file)}
-            canUndo={ws.canUndo}
-            canRedo={ws.canRedo}
-            onUndo={ws.undo}
-            onRedo={ws.redo}
-            onStartOver={ws.startOver}
+            selectedFiles={selectedWorkspaceFiles.map((f) => f.file)}
             hasFiles={ws.files.length > 0}
           />
         </aside>
 
-        <main className="min-w-0 flex-1 overflow-y-auto p-4">
-          <div className="mb-3 space-y-2">
+        <main className="desk order-1 min-w-0 p-4 sm:p-6 lg:order-2 lg:overflow-y-auto">
+          <div className="space-y-4">
             <GlobalControls
               totalCount={ws.files.length}
-              checkedCount={ws.checked.size}
+              selectedCount={selectedCount}
               onSelectAll={ws.selectAll}
               onDeselectAll={ws.deselectAll}
-              onDeleteChecked={() => ws.removeFiles(Array.from(ws.checked))}
-              onDownloadChecked={downloadChecked}
+              onDeleteSelected={() => deleteFiles(Array.from(ws.checked))}
+              onDownloadSelected={() => downloadFiles(selectedWorkspaceFiles.map((f) => f.file))}
+              onAddFiles={openPicker}
             />
-            {skippedNames.length > 0 && (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                Skipped {skippedNames.join(", ")} — only PDF, JPG, and PNG files are supported.
-              </p>
+            {hasLargeFile && (
+              <Alert tone="warn" title="Large file">
+                Files are processed entirely on your device, so very large ones may run slowly or run out of memory,
+                depending on your computer.
+              </Alert>
             )}
-            {ws.files.some((f) => f.file.size > LARGE_FILE_WARNING_BYTES) && (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                Large files are processed entirely in your browser and may run slowly or run out of memory,
-                depending on your device.
-              </p>
-            )}
+            <FilesGrid
+              files={ws.files}
+              checked={ws.checked}
+              onToggleChecked={ws.toggleChecked}
+              onRemove={(id) => deleteFiles([id])}
+              onReorder={ws.reorderFiles}
+              onOpenPicker={openPicker}
+              edits={ws.edits}
+              onFileEditsChange={ws.setFileEdits}
+              onFileLoaded={(id, edits, file) => {
+                ws.initFileEdits(id, edits, file);
+                setPageCounts((prev) => ({ ...prev, [id]: edits.length }));
+              }}
+              activeTool={ws.activeTool}
+              onSelectionChange={(id, indices) => setSplitSelectionByFile((prev) => ({ ...prev, [id]: indices }))}
+            />
           </div>
-
-          <FilesRow
-            files={ws.files}
-            checked={ws.checked}
-            onToggleChecked={ws.toggleChecked}
-            onRemove={(id) => ws.removeFiles([id])}
-            onReorder={ws.reorderFiles}
-            onAddFiles={addFiles}
-            edits={ws.edits}
-            onFileEditsChange={ws.setFileEdits}
-            onFileLoaded={ws.initFileEdits}
-            activeTool={ws.activeTool}
-            onSelectionChange={(id, indices) => setSplitSelectionByFile((prev) => ({ ...prev, [id]: indices }))}
-          />
         </main>
 
-        {ws.activeTool && meta && (
-          <aside
-            className="animate-card-in w-80 shrink-0 overflow-y-auto border-l bg-white p-4"
-            style={{ borderColor: `${meta.accent}55` }}
-          >
-            <h3 className="mb-1 flex items-center gap-2 font-semibold text-gray-900">
-              <span aria-hidden="true">{meta.icon}</span>
-              {meta.title}
-            </h3>
-            <p className="mb-3 text-xs text-gray-500">{meta.description}</p>
-            <ToolPanel
-              tool={ws.activeTool}
-              files={ws.files}
-              checkedIds={ws.checked}
-              edits={ws.edits}
-              splitSelection={splitSelection}
-              runJob={runJob}
-              onApplyBatch={ws.replaceFiles}
-              onApplyCombine={ws.replaceWithCombined}
-            />
-          </aside>
-        )}
+        <aside
+          ref={panelRef}
+          aria-label="Tool options"
+          className="order-3 scroll-mt-4 border-t-2 border-ink bg-card lg:overflow-y-auto lg:border-l lg:border-t-0 lg:border-line"
+        >
+          {ws.activeTool && meta ? (
+            <div key={ws.activeTool} className="animate-card-in p-5">
+              <div className="flex items-start gap-3">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-ink bg-brand text-white shadow-[0_3px_0_0_var(--color-ink)]">
+                  <ToolIcon tool={ws.activeTool} className="h-6 w-6" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-display text-2xl font-extrabold leading-tight text-ink">{meta.title}</h2>
+                  <p className="mt-1 text-[15px] leading-snug text-ink-2">{meta.description}</p>
+                </div>
+              </div>
+              <div className="mt-6">
+                <ToolPanel
+                  tool={ws.activeTool}
+                  files={ws.files}
+                  checkedIds={ws.checked}
+                  edits={ws.edits}
+                  pageCounts={pageCounts}
+                  splitSelection={splitSelection}
+                  runJob={runJob}
+                  onApplyBatch={(updates, summary) => {
+                    // A tool that found nothing to change shouldn't leave a do-nothing undo step behind.
+                    if (updates.length === 0) {
+                      showToast(summary, { tone: "info" });
+                      return;
+                    }
+                    ws.replaceFiles(updates);
+                    showToast(summary, { action: undoAction });
+                  }}
+                  onApplyCombine={(removeIds, newFile, summary) => {
+                    ws.replaceWithCombined(removeIds, newFile);
+                    showToast(summary, { action: undoAction });
+                  }}
+                  onSelectOnly={ws.selectOnly}
+                  onMoveFile={moveSelectedFile}
+                  onAddFiles={openPicker}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed border-ink-3 text-ink-3">
+                <ArrowLeft className="hidden h-7 w-7 lg:block" aria-hidden="true" />
+              </span>
+              <h2 className="font-display text-xl font-extrabold text-ink">Pick a tool</h2>
+              <p className="max-w-60 text-[15px] leading-snug text-ink-2">
+                {ws.files.length > 0
+                  ? "Choose a tool from the list. Its options will show up here."
+                  : "Add your files first, then choose a tool. Its options will show up here."}
+              </p>
+            </div>
+          )}
+        </aside>
       </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPT_ATTR}
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) addFiles(Array.from(e.target.files));
+          e.target.value = "";
+        }}
+      />
+
+      {dragging && <DropOverlay />}
+      <ToastHost toast={toast} onDismiss={dismissToast} />
+
+      {confirmingStartOver && (
+        <ConfirmDialog
+          title="Start over?"
+          message={`This removes ${plural(ws.files.length, "file")} and your edit history. It can't be undone.`}
+          confirmLabel="Yes, start over"
+          onConfirm={() => {
+            ws.startOver();
+            setSplitSelectionByFile({});
+            setConfirmingStartOver(false);
+          }}
+          onCancel={() => setConfirmingStartOver(false)}
+        />
+      )}
     </div>
   );
 }

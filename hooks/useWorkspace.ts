@@ -204,6 +204,8 @@ export function useWorkspace() {
     setActiveToolState((prev) => (prev === tool ? null : tool));
   }, []);
 
+  const closeTool = useCallback(() => setActiveToolState(null), []);
+
   /** Opens a tool without toggling — for links and other places that mean "show this one", not "flip it". */
   const openTool = useCallback((tool: ToolSlug) => setActiveToolState(tool), []);
 
@@ -226,6 +228,7 @@ export function useWorkspace() {
       canRedo: historyIndex < history.length - 1,
       setActiveTool,
       openTool,
+      closeTool,
       addFiles,
       removeFiles,
       reorderFiles,
@@ -249,6 +252,7 @@ export function useWorkspace() {
       history.length,
       setActiveTool,
       openTool,
+      closeTool,
       addFiles,
       removeFiles,
       reorderFiles,

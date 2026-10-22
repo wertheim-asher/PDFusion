@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { ToastHost, useToast } from "@/components/ui/Toast";
 import { usePdfWorker } from "@/hooks/usePdfWorker";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { downloadFiles } from "@/lib/download";
+import { DOWNLOAD_STARTED_EVENT, downloadFiles } from "@/lib/download";
 import { ACCEPT_ATTR, plural, splitAcceptedFiles } from "@/lib/files";
 import { TOOLS, type ToolSlug } from "@/lib/tools";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -116,6 +116,16 @@ export function Workspace() {
       panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [ws.activeTool]);
+
+  // Confirm downloads: some environments (notably the desktop app) show no download UI of their own.
+  useEffect(() => {
+    const onDownload = (e: Event) => {
+      const { filename } = (e as CustomEvent<{ filename: string }>).detail;
+      showToast(`Downloading “${filename}” — check your Downloads folder.`, { tone: "info" });
+    };
+    window.addEventListener(DOWNLOAD_STARTED_EVENT, onDownload);
+    return () => window.removeEventListener(DOWNLOAD_STARTED_EVENT, onDownload);
+  }, [showToast]);
 
   // Latest handlers for the long-lived window listeners below, without re-subscribing every render.
   const latest = useRef({ addFiles, deleteFiles, openPicker, ws, modalOpen: false });
@@ -326,6 +336,8 @@ export function Workspace() {
                   }}
                   onApplyCombine={(removeIds, newFile, summary) => {
                     ws.replaceWithCombined(removeIds, newFile);
+                    // The sources are gone, so this tool no longer applies; leave the panel ready for the next choice.
+                    ws.closeTool();
                     showToast(summary, { action: undoAction });
                   }}
                   onSelectOnly={ws.selectOnly}

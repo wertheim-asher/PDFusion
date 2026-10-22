@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "create": false,
         "title": "PDF Tool",
         "width": 1360,
         "height": 860,

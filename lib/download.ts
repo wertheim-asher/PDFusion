@@ -1,5 +1,8 @@
 import JSZip from "jszip";
 
+/** Fired on `window` whenever a download is handed to the browser/webview. `detail.filename` is the file's name. */
+export const DOWNLOAD_STARTED_EVENT = "pdfusion:download-started";
+
 /**
  * The one place the app hands bytes to the user. Keeping it central means any
  * platform-specific saving (e.g. a native save dialog in the desktop app) only
@@ -15,6 +18,8 @@ export function saveBlob(blob: Blob, filename: string): void {
   a.remove();
   // Revoking immediately can cancel the download in some browsers; give it a moment to start.
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  // The desktop app shows no download UI of its own, so let the page confirm that something happened.
+  window.dispatchEvent(new CustomEvent(DOWNLOAD_STARTED_EVENT, { detail: { filename } }));
 }
 
 /** One file downloads as itself; several are bundled into a single zip (duplicate names get " (2)", " (3)"…). */

@@ -44,7 +44,8 @@ export function ToastHost({ toast, onDismiss }: { toast: ToastData | null; onDis
   }, [toast, paused, onDismiss]);
 
   return (
-    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
+    // Below the modal dialogs (z-50) so a toast can never cover a dialog's buttons.
+    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
       {toast && (
         <div
           key={toast.id}

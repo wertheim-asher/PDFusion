@@ -87,10 +87,16 @@ export function FilesGrid({
             draggable={files.length > 1}
             onDragStart={() => (dragIndex.current = index)}
             onDragOver={(e) => {
+              // Only a card being dragged is a reorder; files coming in from the desktop are handled page-wide.
+              if (dragIndex.current === null) return;
               e.preventDefault();
               setDragOverIndex(index);
             }}
             onDrop={() => handleDrop(index)}
+            onDragEnd={() => {
+              dragIndex.current = null;
+              setDragOverIndex(null);
+            }}
             isDragOver={dragOverIndex === index}
           />
         );

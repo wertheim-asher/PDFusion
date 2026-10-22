@@ -13,10 +13,14 @@
     "windows": [
       {
         "title": "PDF Tool",
-        "width": 1200,
-        "height": 800,
+        "width": 1360,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {

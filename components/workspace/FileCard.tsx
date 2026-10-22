@@ -34,6 +34,7 @@ interface FileCardProps {
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: () => void;
+  onDragEnd: () => void;
   isDragOver: boolean;
 }
 
@@ -58,6 +59,7 @@ export function FileCard({
   onDragStart,
   onDragOver,
   onDrop,
+  onDragEnd,
   isDragOver,
 }: FileCardProps) {
   const isImage = wf.file.type.startsWith("image/");
@@ -108,6 +110,7 @@ export function FileCard({
       }
       onDragOver={cardDraggable ? onDragOver : undefined}
       onDrop={cardDraggable ? onDrop : undefined}
+      onDragEnd={cardDraggable ? onDragEnd : undefined}
       className={`animate-card-in flex flex-col rounded-2xl border-2 bg-card transition-[border-color,box-shadow,transform] duration-150 ${
         interactive ? "col-span-full" : ""
       } ${

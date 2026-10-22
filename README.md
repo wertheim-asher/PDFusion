@@ -9,6 +9,10 @@ Free PDF tools that run entirely in your browser — merge, split, organize, rot
 - [`mupdf`](https://mupdf.readthedocs.io/) (WebAssembly) handles password protect/unlock, since `pdf-lib` has no encryption support. Note: `mupdf` is AGPL-3.0 licensed.
 - Heavy `pdf-lib`/`mupdf` work runs in a Web Worker (`workers/pdf.worker.ts`) so the UI stays responsive; `pdf.js` rendering runs on the main thread because it needs a real `<canvas>`.
 
+## Design
+
+The look is "paper and ink": a warm paper background, near-black ink for structure and text, and the logo's red as the single action color. Fonts (Bricolage Grotesque and Figtree) are self-hosted by `next/font`, so the browser never contacts a third party. Design tokens live in `app/globals.css`; shared building blocks (Button, Alert, form fields, Toast) are in `components/ui/`. Interactive targets are at least 40px tall, and primary actions are 56px — new UI should keep to that.
+
 ## Development
 
 ```bash
@@ -42,6 +46,14 @@ npm run tauri build   # production build: runs `npm run build`, then bundles ins
 - `bundle/nsis/PDF Tool_<version>_x64-setup.exe`
 
 App icon source is `components/Logo.tsx`'s mark; regenerate the icon set with `npx tauri icon <path-to-1024x1024-png>` if the logo changes.
+
+### Desktop-specific behavior
+
+The UI is identical to the web app, but the webview underneath differs, so a few things are handled on the Rust side (`src-tauri/`):
+
+- **Downloads.** The main window is created in `src-tauri/src/lib.rs` (its entry in `tauri.conf.json` has `"create": false`) with a download handler. macOS's WebKit view *cancels every download* unless one is registered, so without it "Download" would silently do nothing there. Files are saved to the user's Downloads folder (existing names get ` (1)`, ` (2)`…). The webview shows no download UI of its own, so the page raises a toast when a download starts.
+- **File drops.** `dragDropEnabled` is `false` so the page's own drag-and-drop works on Windows; otherwise Tauri intercepts OS file drops.
+- **Window size.** The minimum width (1024px) matches the three-column layout's breakpoint, so the desktop app never falls into the stacked small-screen layout.
 
 ### Staying in sync with the web app
 

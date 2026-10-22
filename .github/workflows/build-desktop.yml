@@ -7,6 +7,12 @@ on:
       - '**.md'
   workflow_dispatch:
 
+# A newer push supersedes any build still running for an older one, so a burst
+# of small commits only publishes the latest installers.
+concurrency:
+  group: build-desktop
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Redo2, ShieldCheck, Undo2 } from "lucide-react";
+import { ArrowLeft, CircleHelp, Redo2, ShieldCheck, Undo2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { ToolIcon } from "@/components/ToolIcon";
 import { Alert } from "@/components/ui/Alert";
@@ -17,6 +17,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { DropOverlay } from "./DropOverlay";
 import { FilesGrid } from "./FilesGrid";
 import { GlobalControls } from "./GlobalControls";
+import { HelpDialog } from "./HelpDialog";
 import { ToolPanel } from "./ToolPanel";
 import { ToolSidebar } from "./ToolSidebar";
 
@@ -41,6 +42,7 @@ export function Workspace() {
   const [splitSelectionByFile, setSplitSelectionByFile] = useState<Record<string, number[]>>({});
   const [pageCounts, setPageCounts] = useState<Record<string, number>>({});
   const [confirmingStartOver, setConfirmingStartOver] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -116,9 +118,9 @@ export function Workspace() {
   }, [ws.activeTool]);
 
   // Latest handlers for the long-lived window listeners below, without re-subscribing every render.
-  const latest = useRef({ addFiles, deleteFiles, openPicker, ws, confirmingStartOver });
+  const latest = useRef({ addFiles, deleteFiles, openPicker, ws, modalOpen: false });
   useEffect(() => {
-    latest.current = { addFiles, deleteFiles, openPicker, ws, confirmingStartOver };
+    latest.current = { addFiles, deleteFiles, openPicker, ws, modalOpen: confirmingStartOver || helpOpen };
   });
 
   // Drop files anywhere on the page.
@@ -160,8 +162,8 @@ export function Workspace() {
   // Keyboard shortcuts. Text fields keep their own Ctrl+Z/Ctrl+A.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { ws, openPicker, deleteFiles, confirmingStartOver } = latest.current;
-      if (confirmingStartOver) return;
+      const { ws, openPicker, deleteFiles, modalOpen } = latest.current;
+      if (modalOpen) return;
       const target = e.target as HTMLElement | null;
       const typing =
         !!target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
@@ -172,6 +174,9 @@ export function Workspace() {
         openPicker();
       } else if (typing) {
         return;
+      } else if (e.key === "?") {
+        e.preventDefault();
+        setHelpOpen(true);
       } else if (hasMod && key === "z") {
         e.preventDefault();
         if (e.shiftKey) ws.redo();
@@ -228,6 +233,14 @@ export function Workspace() {
               Start over
             </Button>
           )}
+          <Button
+            variant="ghost"
+            iconOnly
+            aria-label="Help and keyboard shortcuts"
+            title="Help and keyboard shortcuts (?)"
+            onClick={() => setHelpOpen(true)}
+            icon={<CircleHelp className="h-6 w-6" aria-hidden="true" />}
+          />
         </div>
       </header>
 
@@ -350,6 +363,7 @@ export function Workspace() {
       />
 
       {dragging && <DropOverlay />}
+      {helpOpen && <HelpDialog mod={mod} onClose={() => setHelpOpen(false)} />}
       <ToastHost toast={toast} onDismiss={dismissToast} />
 
       {confirmingStartOver && (

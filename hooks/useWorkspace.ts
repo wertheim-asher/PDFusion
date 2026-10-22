@@ -199,9 +199,13 @@ export function useWorkspace() {
     [patchCurrent]
   );
 
+  /** Clicking the active tool again closes it. */
   const setActiveTool = useCallback((tool: ToolSlug) => {
     setActiveToolState((prev) => (prev === tool ? null : tool));
   }, []);
+
+  /** Opens a tool without toggling — for links and other places that mean "show this one", not "flip it". */
+  const openTool = useCallback((tool: ToolSlug) => setActiveToolState(tool), []);
 
   const undo = useCallback(() => setHistoryIndex((i) => Math.max(0, i - 1)), []);
   const redo = useCallback(() => setHistoryIndex((i) => Math.min(history.length - 1, i + 1)), [history.length]);
@@ -221,6 +225,7 @@ export function useWorkspace() {
       canUndo: historyIndex > 0,
       canRedo: historyIndex < history.length - 1,
       setActiveTool,
+      openTool,
       addFiles,
       removeFiles,
       reorderFiles,
@@ -243,6 +248,7 @@ export function useWorkspace() {
       historyIndex,
       history.length,
       setActiveTool,
+      openTool,
       addFiles,
       removeFiles,
       reorderFiles,

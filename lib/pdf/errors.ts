@@ -37,7 +37,10 @@ export function assertSafePassword(password: string): void {
 export function describeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof PdfToolError) return message;
-  if (/encrypt|password/i.test(message)) {
+  // Errors lose their class crossing the worker boundary, so our own messages (e.g. "That password doesn't
+  // unlock this PDF.") arrive as plain Errors too — only rewrite the one cryptic message pdf-lib gives for
+  // encrypted files, never anything merely mentioning a password.
+  if (/is encrypted/i.test(message)) {
     return "This PDF is password-protected. Use “Unlock PDF” on it first, then try again.";
   }
   if (/failed to parse|no pdf header|invalid pdf|xref|unexpected token/i.test(message)) {

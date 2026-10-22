@@ -17,11 +17,11 @@ export function EmptyState({ onOpenPicker }: { onOpenPicker: () => void }) {
           <rect x="10" y="2" width="15" height="19" rx="3" fill="#DC2626" />
           <path d="M14.5 9.5h6M14.5 13h6M14.5 16.5h3.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
-        <h1 className="mt-6 font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-ink sm:text-5xl">
+        <h2 className="mt-6 font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-ink sm:text-5xl">
           Fix up your PDFs.
           <br />
           <span className="text-brand">Keep them private.</span>
-        </h1>
+        </h2>
         <p className="mt-4 max-w-md text-lg text-ink-2">
           Merge, split, compress, convert and more — all done on your own device, so your files never leave it.
         </p>
@@ -43,7 +43,7 @@ export function EmptyState({ onOpenPicker }: { onOpenPicker: () => void }) {
             <span className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink bg-marker font-display text-lg font-extrabold text-ink">
               {i + 1}
             </span>
-            <h2 className="mt-3 font-display text-lg font-bold text-ink">{step.title}</h2>
+            <h3 className="mt-3 font-display text-lg font-bold text-ink">{step.title}</h3>
             <p className="mt-1 text-[15px] leading-snug text-ink-2">{step.body}</p>
           </li>
         ))}

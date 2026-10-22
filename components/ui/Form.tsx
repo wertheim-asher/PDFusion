@@ -70,7 +70,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HT
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? "Hide password" : "Show password"}
         aria-pressed={visible}
-        className="absolute right-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
+        className="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
       >
         {visible ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
       </button>

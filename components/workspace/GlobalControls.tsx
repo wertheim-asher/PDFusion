@@ -32,7 +32,7 @@ export function GlobalControls({
     <div className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div>
-          <h1 className="font-display text-3xl font-extrabold leading-none tracking-tight text-ink">Your files</h1>
+          <h2 className="font-display text-3xl font-extrabold leading-none tracking-tight text-ink">Your files</h2>
           <p className="mt-1.5 text-[15px] text-ink-2" aria-live="polite">
             {plural(totalCount, "file")}
             {none ? " · none selected" : ` · ${selectedCount} selected`}

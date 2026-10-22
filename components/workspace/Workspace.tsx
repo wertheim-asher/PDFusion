@@ -96,7 +96,7 @@ export function Workspace() {
     // Static export can't read the ?tool= query param server-side, so pick it
     // up client-side — this only matters for old /tools/[slug] links redirected here.
     const tool = new URLSearchParams(window.location.search).get("tool");
-    if (tool && tool in TOOLS) ws.setActiveTool(tool as ToolSlug);
+    if (tool && tool in TOOLS) ws.openTool(tool as ToolSlug);
     // Runs once on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -196,6 +196,7 @@ export function Workspace() {
   return (
     <div className="flex min-h-dvh flex-col lg:h-dvh lg:overflow-hidden">
       <header className="flex h-16 shrink-0 items-center gap-3 border-b-2 border-ink bg-card px-4 lg:px-6">
+        <h1 className="sr-only">PDFusion — private PDF tools</h1>
         <Link href="/" aria-label="PDFusion home" className="rounded-lg">
           <Logo />
         </Link>
@@ -231,16 +232,7 @@ export function Workspace() {
       </header>
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[17rem_minmax(0,1fr)_20rem] xl:grid-cols-[19rem_minmax(0,1fr)_23rem]">
-        <aside className="order-2 border-t-2 border-ink bg-card lg:order-1 lg:overflow-y-auto lg:border-r lg:border-t-0 lg:border-line">
-          <ToolSidebar
-            activeTool={ws.activeTool}
-            onSelectTool={ws.setActiveTool}
-            selectedFiles={selectedWorkspaceFiles.map((f) => f.file)}
-            hasFiles={ws.files.length > 0}
-          />
-        </aside>
-
-        <main className="desk order-1 min-w-0 p-4 sm:p-6 lg:order-2 lg:overflow-y-auto">
+        <main className="desk min-w-0 p-4 sm:p-6 lg:order-2 lg:overflow-y-auto">
           <div className="space-y-4">
             <GlobalControls
               totalCount={ws.files.length}
@@ -276,10 +268,19 @@ export function Workspace() {
           </div>
         </main>
 
+        <aside className="border-t-2 border-ink bg-card lg:order-1 lg:overflow-y-auto lg:border-r lg:border-t-0 lg:border-line">
+          <ToolSidebar
+            activeTool={ws.activeTool}
+            onSelectTool={ws.setActiveTool}
+            selectedFiles={selectedWorkspaceFiles.map((f) => f.file)}
+            hasFiles={ws.files.length > 0}
+          />
+        </aside>
+
         <aside
           ref={panelRef}
           aria-label="Tool options"
-          className="order-3 scroll-mt-4 border-t-2 border-ink bg-card lg:overflow-y-auto lg:border-l lg:border-t-0 lg:border-line"
+          className="scroll-mt-4 border-t-2 border-ink bg-card lg:order-3 lg:overflow-y-auto lg:border-l lg:border-t-0 lg:border-line"
         >
           {ws.activeTool && meta ? (
             <div key={ws.activeTool} className="animate-card-in p-5">

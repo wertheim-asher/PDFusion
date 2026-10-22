@@ -7,6 +7,7 @@ import { Logo } from "@/components/Logo";
 import { usePdfWorker } from "@/hooks/usePdfWorker";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { TOOLS, type ToolSlug } from "@/lib/tools";
+import { splitAcceptedFiles } from "@/lib/files";
 import { ToolSidebar } from "./ToolSidebar";
 import { FilesRow } from "./FilesRow";
 import { GlobalControls } from "./GlobalControls";
@@ -18,6 +19,13 @@ export function Workspace() {
   const ws = useWorkspace();
   const { runJob } = usePdfWorker();
   const [splitSelectionByFile, setSplitSelectionByFile] = useState<Record<string, number[]>>({});
+  const [skippedNames, setSkippedNames] = useState<string[]>([]);
+
+  const addFiles = (incoming: File[]) => {
+    const { accepted, rejected } = splitAcceptedFiles(incoming);
+    setSkippedNames(rejected.map((f) => f.name));
+    ws.addFiles(accepted);
+  };
 
   useEffect(() => {
     // Static export can't read the ?tool= query param server-side, so pick it
@@ -105,6 +113,11 @@ export function Workspace() {
               onDeleteChecked={() => ws.removeFiles(Array.from(ws.checked))}
               onDownloadChecked={downloadChecked}
             />
+            {skippedNames.length > 0 && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Skipped {skippedNames.join(", ")} — only PDF, JPG, and PNG files are supported.
+              </p>
+            )}
             {ws.files.some((f) => f.file.size > LARGE_FILE_WARNING_BYTES) && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 Large files are processed entirely in your browser and may run slowly or run out of memory,
@@ -119,7 +132,7 @@ export function Workspace() {
             onToggleChecked={ws.toggleChecked}
             onRemove={(id) => ws.removeFiles([id])}
             onReorder={ws.reorderFiles}
-            onAddFiles={ws.addFiles}
+            onAddFiles={addFiles}
             edits={ws.edits}
             onFileEditsChange={ws.setFileEdits}
             onFileLoaded={ws.initFileEdits}

@@ -15,7 +15,7 @@ interface FilesRowProps {
   onAddFiles: (files: File[]) => void;
   edits: Record<string, PageEdit[]>;
   onFileEditsChange: (id: string, edits: PageEdit[]) => void;
-  onFileLoaded: (id: string, edits: PageEdit[]) => void;
+  onFileLoaded: (id: string, edits: PageEdit[], file: File) => void;
   activeTool: ToolSlug | null;
   onSelectionChange: (id: string, indices: number[]) => void;
 }
@@ -67,7 +67,7 @@ export function FilesRow({
               onRemove={() => onRemove(wf.id)}
               edits={edits[wf.id] ?? []}
               onEditsChange={(next) => onFileEditsChange(wf.id, next)}
-              onLoaded={(next) => onFileLoaded(wf.id, next)}
+              onLoaded={(next) => onFileLoaded(wf.id, next, wf.file)}
               interactive={interactive}
               gridProps={pageToolGridProps ?? {}}
               onSelectionChange={(indices) => onSelectionChange(wf.id, indices)}
